@@ -161,32 +161,27 @@ type app struct {
 	underTop, underBottom bool
 	barScrub              scrubState
 	npScrub               scrubState
-	glowColor             ui.Color          // the color of Now Playing's glow, from the cover's
-	menu                  paneMenu          // the menu open, if one is (ui_pane.go)
-	npPill                ui.Rect           // where the tab chosen is, in the row of tabs
-	barBox                ui.Rect           // where the player bar is, which Now Playing grows from
-	barSpot, npSpot       flightSpot        // what stays as it grows, in the bar and in the view
-	npK                   float32           // how far Now Playing has opened, from 0 to 1
-	npCoverScale          float32           // how its cover stands, which the flight lands at
-	motion                int               // how much the app moves, in this frame
-	playFlies             func(ui.Element)  // what hides the play button being built as it flies
-	pageDir               int               // the way the page last changed: 1 in, -1 back, 0 across
-	feedback              feedbackState     // the message being written, in the settings
-	roam                  *roamer           // what deals the songs of styles
-	deskWin, miniWin      *mygo.Window      // the windows that float, once opened
-	splashed              bool              // the record has come in, as the app started
-	splashAt              time.Time         // when it started to
-	keysTaken             int               // how many global keys other apps hold
-	miniScrub             scrubState        // the progress of the mini window
-	morph                 floatMorph        // the player on its way to or from it
-	deskBtn               ui.Rect           // the player bar's button of the desktop lyrics, while it shows
-	deskFly               deskFlight        // the desktop lyrics on their way out of it or back
-	sleep                 sleepState        // the timer that pauses the music
-	shortcutKeys          map[string]string // the global key registered for each action
-	registeredKeys        []string          // the global keys held, to let them go
-	shortcutSetup         shortcutEditor
-	keysPaused            bool             // the global keys and menu keys are let go, for a recording
-	keyedItems            []*mygo.MenuItem // the menu items with keys of their own
+	glowColor             ui.Color         // the color of Now Playing's glow, from the cover's
+	menu                  paneMenu         // the menu open, if one is (ui_pane.go)
+	npPill                ui.Rect          // where the tab chosen is, in the row of tabs
+	barBox                ui.Rect          // where the player bar is, which Now Playing grows from
+	barSpot, npSpot       flightSpot       // what stays as it grows, in the bar and in the view
+	npK                   float32          // how far Now Playing has opened, from 0 to 1
+	npCoverScale          float32          // how its cover stands, which the flight lands at
+	motion                int              // how much the app moves, in this frame
+	playFlies             func(ui.Element) // what hides the play button being built as it flies
+	pageDir               int              // the way the page last changed: 1 in, -1 back, 0 across
+	feedback              feedbackState    // the message being written, in the settings
+	roam                  *roamer          // what deals the songs of styles
+	deskWin, miniWin      *mygo.Window     // the windows that float, once opened
+	splashed              bool             // the record has come in, as the app started
+	splashAt              time.Time        // when it started to
+	miniScrub             scrubState       // the progress of the mini window
+	morph                 floatMorph       // the player on its way to or from it
+	deskBtn               ui.Rect          // the player bar's button of the desktop lyrics, while it shows
+	deskFly               deskFlight       // the desktop lyrics on their way out of it or back
+	sleep                 sleepState       // the timer that pauses the music
+	keys                  shortcutState    // the global keys and the menu keys
 	spin                  discState        // how far the bar's cover has turned
 	npPointer             bool             // the pointer is over Now Playing
 	headAt                ui.Rect          // where the cover of the page's header is

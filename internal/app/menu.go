@@ -79,12 +79,12 @@ func (a *app) setMenu() {
 			{Role: mygo.RoleFront, Label: "前置全部窗口"},
 		}},
 	}
-	a.keyedItems = nil
+	a.keys.items = nil
 	var keyed func([]*mygo.MenuItem)
 	keyed = func(items []*mygo.MenuItem) {
 		for _, it := range items {
 			if it.Accelerator != "" && it.Role == "" {
-				a.keyedItems = append(a.keyedItems, it)
+				a.keys.items = append(a.keys.items, it)
 			}
 			keyed(it.Submenu)
 		}

@@ -50,17 +50,17 @@ func TestShortcutEditorRecords(t *testing.T) {
 	unregisterShortcut = func(string) {}
 	defer func() { registerShortcut, unregisterShortcut = oldRegister, oldUnregister }()
 	a.applyGlobalKeys()
-	a.shortcutSetup.recording = "play"
+	a.keys.setup.recording = "play"
 	if !a.recordShortcut(ui.InputEvent{Kind: ui.InputKeyDown, Key: ui.KeyK, Mods: ui.Ctrl | ui.Alt}) {
 		t.Fatal("the key was not taken")
 	}
 	if got := a.settings.Shortcuts["play"]; got != "Ctrl+Alt+K" {
 		t.Fatalf("saved %q", got)
 	}
-	if got := a.shortcutKeys["play"]; got != "Ctrl+Alt+K" {
+	if got := a.keys.bound["play"]; got != "Ctrl+Alt+K" {
 		t.Fatalf("registered %q, all %v", got, registered)
 	}
-	if a.shortcutSetup.recording != "" {
+	if a.keys.setup.recording != "" {
 		t.Fatal("still recording")
 	}
 }
@@ -69,10 +69,10 @@ func TestShortcutEditorRecords(t *testing.T) {
 func TestShortcutRecordingRejectsALetterAlone(t *testing.T) {
 	a := newTestApp()
 	a.settings = defaultSettings()
-	a.shortcutSetup.recording = "play"
+	a.keys.setup.recording = "play"
 	a.recordShortcut(ui.InputEvent{Kind: ui.InputKeyDown, Key: ui.KeyP})
-	if a.settings.Shortcuts["play"] != "" || a.shortcutSetup.err == "" {
-		t.Fatalf("saved %q, err %q", a.settings.Shortcuts["play"], a.shortcutSetup.err)
+	if a.settings.Shortcuts["play"] != "" || a.keys.setup.err == "" {
+		t.Fatalf("saved %q, err %q", a.settings.Shortcuts["play"], a.keys.setup.err)
 	}
 }
 
@@ -81,12 +81,12 @@ func TestShortcutRecordingRejectsDuplicate(t *testing.T) {
 	a := newTestApp()
 	a.settings = defaultSettings()
 	a.settings.Shortcuts = map[string]string{"play": "Ctrl+Alt+K"}
-	a.shortcutSetup.recording = "next"
+	a.keys.setup.recording = "next"
 	a.recordShortcut(ui.InputEvent{Kind: ui.InputKeyDown, Key: ui.KeyK, Mods: ui.Ctrl | ui.Alt})
-	if a.settings.Shortcuts["next"] != "" || !strings.Contains(a.shortcutSetup.err, "播放/暂停") {
-		t.Fatalf("saved %q, err %q", a.settings.Shortcuts["next"], a.shortcutSetup.err)
+	if a.settings.Shortcuts["next"] != "" || !strings.Contains(a.keys.setup.err, "播放/暂停") {
+		t.Fatalf("saved %q, err %q", a.settings.Shortcuts["next"], a.keys.setup.err)
 	}
-	if a.shortcutSetup.recording != "next" {
+	if a.keys.setup.recording != "next" {
 		t.Fatal("the action stopped recording")
 	}
 }
@@ -101,8 +101,8 @@ func TestShortcutRegisterFailure(t *testing.T) {
 	unregisterShortcut = func(string) {}
 	defer func() { registerShortcut, unregisterShortcut = oldRegister, oldUnregister }()
 	a.applyGlobalKeys()
-	if a.keysTaken != len(shortcutActions) || len(a.shortcutKeys) != 0 {
-		t.Fatalf("taken %d, keys %v", a.keysTaken, a.shortcutKeys)
+	if a.keys.taken != len(shortcutActions) || len(a.keys.bound) != 0 {
+		t.Fatalf("taken %d, keys %v", a.keys.taken, a.keys.bound)
 	}
 }
 
@@ -153,13 +153,13 @@ func TestShortcutEditorFrames(t *testing.T) {
 					"play": "Ctrl+Alt+K",
 					"mute": "Ctrl+Alt+Shift+X",
 				}
-				a.shortcutKeys = map[string]string{
+				a.keys.bound = map[string]string{
 					"play": "Ctrl+Alt+K", "next": "Ctrl+Alt+Right",
 					"prev": "Ctrl+Alt+Left", "volume-up": "Ctrl+Alt+Up",
 					"volume-down": "Ctrl+Alt+Down", "like": "Ctrl+Alt+V",
 					"show": "Ctrl+Alt+M",
 				}
-				a.shortcutSetup.open = true
+				a.keys.setup.open = true
 				tt := ui.NewTester(a.view, size.w, size.h)
 				tt.SetDark(dark)
 				tt.SetPreferences(ui.Preferences{ReduceMotion: true})
@@ -200,7 +200,7 @@ func TestShortcutRecordingPausesKeys(t *testing.T) {
 	if len(held) != 0 {
 		t.Fatalf("keys still held while recording: %v", held)
 	}
-	if a.shortcutKeys["prev"] != "Ctrl+Alt+Left" {
+	if a.keys.bound["prev"] != "Ctrl+Alt+Left" {
 		t.Fatal("the keys shown were forgotten")
 	}
 	a.pauseKeys(false)

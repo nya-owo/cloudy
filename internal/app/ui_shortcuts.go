@@ -15,9 +15,9 @@ type shortcutEditor struct {
 }
 
 func (a *app) openShortcutEditor() {
-	a.shortcutSetup.open = true
-	a.shortcutSetup.recording, a.shortcutSetup.err = "", ""
-	a.shortcutSetup.scroll = ui.ScrollState{}
+	a.keys.setup.open = true
+	a.keys.setup.recording, a.keys.setup.err = "", ""
+	a.keys.setup.scroll = ui.ScrollState{}
 	a.redraw()
 }
 
@@ -33,12 +33,12 @@ func (a *app) shortcutDisplay(act shortcutAction) string {
 		return "未设置"
 	}
 	if custom != "" {
-		if a.shortcutKeys[act.id] == "" {
+		if a.keys.bound[act.id] == "" {
 			return keyLabel(custom) + "（未注册）"
 		}
 		return keyLabel(custom)
 	}
-	if key := a.shortcutKeys[act.id]; key != "" {
+	if key := a.keys.bound[act.id]; key != "" {
 		return keyLabel(key)
 	}
 	if len(act.keys) > 0 {
@@ -64,7 +64,7 @@ func shortcutDefaults(act shortcutAction) string {
 // one of them, in the settings' card and rows, the keys drawn as keycaps.
 // Escape cancels the recording, not the dialog.
 func (a *app) shortcutEditorDialog(c *ui.Context) {
-	s := &a.shortcutSetup
+	s := &a.keys.setup
 	if !s.open {
 		s.recording = ""
 	}
@@ -166,7 +166,7 @@ func keycaps(c *ui.Context, keys string, ink paneInk) {
 
 // recordShortcut takes the keys pressed while a row is recording.
 func (a *app) recordShortcut(ev ui.InputEvent) bool {
-	s := &a.shortcutSetup
+	s := &a.keys.setup
 	if s.recording == "" || ev.Kind != ui.InputKeyDown {
 		return false
 	}
@@ -197,7 +197,7 @@ func (a *app) recordShortcut(ev ui.InputEvent) bool {
 		}
 		used := strings.TrimSpace(a.settings.Shortcuts[other.id])
 		if used == "" {
-			used = a.shortcutKeys[other.id]
+			used = a.keys.bound[other.id]
 		}
 		if used != "" && strings.EqualFold(used, keys) {
 			s.err = "这个组合键已经用于「" + other.label + "」"
@@ -207,7 +207,7 @@ func (a *app) recordShortcut(ev ui.InputEvent) bool {
 	}
 	// Held by another app (NetEase's own player holds Ctrl+Alt+M), it would
 	// not work: the listener learns it now, not after saving.
-	if a.settings.GlobalKeys && !strings.EqualFold(a.shortcutKeys[act.id], keys) {
+	if a.settings.GlobalKeys && !strings.EqualFold(a.keys.bound[act.id], keys) {
 		if err := registerShortcut(keys, func() {}); err != nil {
 			s.err = "「" + keyLabel(keys) + "」已被其他软件占用，请换一个组合键"
 			a.redraw()
@@ -225,7 +225,7 @@ func (a *app) recordShortcut(ev ui.InputEvent) bool {
 	switch {
 	case !a.settings.GlobalKeys:
 		a.toast = "已保存；打开全局快捷键后生效"
-	case a.shortcutKeys[act.id] == "":
+	case a.keys.bound[act.id] == "":
 		a.toast = "已保存，但组合键被其他软件占用"
 	default:
 		a.toast = "已设置 " + act.label + "：" + keyLabel(keys)

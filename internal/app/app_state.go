@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/egoist/mygo"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -41,4 +42,14 @@ type sleepState struct {
 	timer   *time.Timer
 	at      time.Time // when
 	minutes int       // what the listener chose
+}
+
+// shortcutState is the global keys and the menu keys.
+type shortcutState struct {
+	bound  map[string]string // the global key registered for each action
+	held   []string          // the global keys held, to let them go
+	taken  int               // how many global keys other apps hold
+	setup  shortcutEditor
+	paused bool             // the global keys and menu keys are let go, for a recording
+	items  []*mygo.MenuItem // the menu items with keys of their own
 }

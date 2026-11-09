@@ -920,8 +920,8 @@ func (a *app) settingsSystemPage(k *settingsKit) {
 		keys := "在其他软件里也能用"
 		if !s.GlobalKeys {
 			keys = "已关闭"
-		} else if a.keysTaken > 0 {
-			keys = fmt.Sprintf("有 %d 组被其他软件占用", a.keysTaken)
+		} else if a.keys.taken > 0 {
+			keys = fmt.Sprintf("有 %d 组被其他软件占用", a.keys.taken)
 		}
 		k.row("全局快捷键", keys, func() {
 			if k.button("shortcut-custom", "自定义", nil, false, false).Clicked() {

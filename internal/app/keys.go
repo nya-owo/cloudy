@@ -42,11 +42,11 @@ var (
 // applyGlobalKeys registers the keys that work from any app, or lets them go.
 // Other apps may hold all of those of something, which keysTaken counts.
 func (a *app) applyGlobalKeys() {
-	for _, key := range a.registeredKeys {
+	for _, key := range a.keys.held {
 		unregisterShortcut(key)
 	}
-	a.registeredKeys, a.keysTaken = nil, 0
-	a.shortcutKeys = map[string]string{}
+	a.keys.held, a.keys.taken = nil, 0
+	a.keys.bound = map[string]string{}
 	if !a.settings.GlobalKeys {
 		return
 	}
@@ -64,14 +64,14 @@ func (a *app) applyGlobalKeys() {
 			})
 			if err == nil {
 				taken = false
-				a.registeredKeys = append(a.registeredKeys, key)
-				a.shortcutKeys[k.id] = key
+				a.keys.held = append(a.keys.held, key)
+				a.keys.bound[k.id] = key
 				break
 			}
 			log.Printf("shortcut %s: %v", key, err)
 		}
 		if taken {
-			a.keysTaken++
+			a.keys.taken++
 		}
 	}
 }
@@ -82,21 +82,21 @@ func (a *app) applyGlobalKeys() {
 // before the recording sees the keys, so that Ctrl+← skipped back a song
 // instead of being recorded.
 func (a *app) pauseKeys(on bool) {
-	if a.keysPaused == on {
+	if a.keys.paused == on {
 		return
 	}
-	a.keysPaused = on
-	for _, it := range a.keyedItems {
+	a.keys.paused = on
+	for _, it := range a.keys.items {
 		it.SetEnabled(!on)
 	}
 	if !on {
 		a.applyGlobalKeys()
 		return
 	}
-	for _, key := range a.registeredKeys {
+	for _, key := range a.keys.held {
 		unregisterShortcut(key)
 	}
-	a.registeredKeys = nil
+	a.keys.held = nil
 }
 
 // toggleWindow shows the window when it is hidden, and hides it when it is
