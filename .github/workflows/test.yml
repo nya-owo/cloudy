@@ -1,0 +1,41 @@
+# Every push to main and every pull request is checked on Windows, where the
+# app runs: the code is gofmt'd, go vet finds nothing, and the tests pass.
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Windows runners check out with CRLF line endings, which gofmt would
+      # report in every file.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "Run gofmt -w on:"
+            echo "$out"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./internal/...
+      - name: go test
+        run: go test ./internal/...
