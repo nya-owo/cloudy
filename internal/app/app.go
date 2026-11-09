@@ -147,7 +147,8 @@ type app struct {
 	uploadGen       int
 	uploadFailed    []cloudUpload
 	uploadsRestored bool
-	uploadedSome    bool // a song went up since the drive was last read
+	uploadUser      int64 // the account the queue goes up for, 0 for none
+	uploadedSome    bool  // a song went up since the drive was last read
 	uploadView      uploadQueueView
 	outputList      outputList // the audio outputs, as last listed
 	comments        commentState

@@ -53,7 +53,7 @@ func (a *app) signedIn(prof *netease.Profile) {
 	// the listener play their songs is back.
 	a.restoreSession()
 	a.restoreDownloadQueue()
-	a.restoreUploadQueue()
+	a.uploadsFor(prof)
 	a.mine, a.saved, a.recPlaylists, a.liked = nil, nil, nil, nil
 	a.style = styleState{}
 	a.myAlbums, a.myAlbumsErr, a.myAlbumsBusy = nil, "", false

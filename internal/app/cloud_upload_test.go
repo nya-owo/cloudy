@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -18,6 +19,7 @@ func uploadTestApp(t *testing.T) *app {
 	a.settings = defaultSettings()
 	a.settings.path = filepath.Join(t.TempDir(), "settings.json")
 	a.profile = &netease.Profile{UserID: 1, Nickname: "小明"}
+	a.uploadUser = 1
 	old := uploadToCloud
 	uploadToCloud = func(ctx context.Context, path string, meta netease.CloudUploadMeta, progress func(sent, total int64)) (int64, error) {
 		<-ctx.Done()
@@ -131,5 +133,58 @@ func TestUploadList(t *testing.T) {
 	tt.Frame()
 	if a.uploadJob != nil || len(a.uploadQueue) != 0 || !tt.HasText("上传列表是空的") {
 		t.Fatalf("job %+v queue %+v: %v", a.uploadJob, a.uploadQueue, tt.Texts())
+	}
+}
+
+// Signing out, or in as another, stops the uploads: they would land on the
+// other account's drive. They are kept for the account they were for, and
+// go up again once it signs back in, not for another, nor for nobody.
+func TestUploadsStayWithTheirAccount(t *testing.T) {
+	a := uploadTestApp(t)
+	a.queueUploads([]cloudUpload{
+		{Path: `C:\Music\a.mp3`, Title: "甲", Size: 1 << 20},
+		{Path: `C:\Music\b.flac`, Title: "乙", Size: 2 << 20},
+	}, 0)
+	a.uploadsFor(nil)
+	if a.uploadJob != nil || len(a.uploadQueue) != 0 || a.uploadUser != 0 {
+		t.Fatalf("still uploading after signing out: job %+v queue %+v", a.uploadJob, a.uploadQueue)
+	}
+	if a.toast != "账号已切换，已停止上传" {
+		t.Fatalf("toast %q", a.toast)
+	}
+
+	a.uploadsFor(&netease.Profile{UserID: 2})
+	if a.uploadJob != nil || len(a.uploadQueue) != 0 {
+		t.Fatalf("another account took the queue: job %+v queue %+v", a.uploadJob, a.uploadQueue)
+	}
+
+	a.uploadsFor(&netease.Profile{UserID: 1})
+	if a.uploadJob == nil || a.uploadJob.item.Title != "甲" || len(a.uploadQueue) != 1 {
+		t.Fatalf("not restored for its account: job %+v queue %+v", a.uploadJob, a.uploadQueue)
+	}
+}
+
+// A queue kept by an earlier version, in one file for any account, is taken
+// up by the first account that signs in, and not while nobody is signed in.
+func TestUploadsOldQueueFile(t *testing.T) {
+	a := uploadTestApp(t)
+	a.uploadUser = 0
+	old := a.oldUploadQueuePath()
+	if err := os.WriteFile(old, []byte(`{"queue":[{"path":"C:\\Music\\a.mp3","title":"甲","size":1048576}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.uploadsFor(nil)
+	if a.uploadJob != nil {
+		t.Fatal("restored with nobody signed in")
+	}
+	a.uploadsFor(&netease.Profile{UserID: 5})
+	if a.uploadJob == nil || a.uploadJob.item.Title != "甲" {
+		t.Fatalf("not restored: %+v", a.uploadJob)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatal("the old file is still there, for the next account to take")
+	}
+	if _, err := os.Stat(a.uploadQueuePath()); err != nil {
+		t.Fatal("not kept for the account:", err)
 	}
 }

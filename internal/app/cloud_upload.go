@@ -307,12 +307,20 @@ type queuedUploads struct {
 	Failed []cloudUpload `json:"failed,omitempty"`
 }
 
-// uploadQueuePath is where the queue is kept, beside the settings: none for
-// settings that were never loaded, as in tests.
+// uploadQueuePath is where the queue of the account signed in is kept,
+// beside the settings: none while nobody is signed in, or for settings that
+// were never loaded, as in tests. Each account has its own, as the songs
+// go up to its drive.
 func (a *app) uploadQueuePath() string {
-	if a.settings.path == "" {
+	if a.settings.path == "" || a.uploadUser == 0 {
 		return ""
 	}
+	return filepath.Join(filepath.Dir(a.settings.path), "upload-queue-"+strconv.FormatInt(a.uploadUser, 10)+".json")
+}
+
+// oldUploadQueuePath is where versions up to 1.2.6 kept the queue, for
+// whoever was signed in.
+func (a *app) oldUploadQueuePath() string {
 	return filepath.Join(filepath.Dir(a.settings.path), "upload-queue.json")
 }
 
@@ -339,20 +347,23 @@ func (a *app) saveUploadQueue() {
 	writeFileAtomic(path, b, 0o600)
 }
 
-// restoreUploadQueue picks the queue up where the app left it, once the
-// listener's session is back: the drive is theirs.
+// restoreUploadQueue picks the queue of the account signed in up where the
+// app left it, once the listener's session is back: the drive is theirs. A
+// queue kept by an earlier version, for no account in particular, goes to
+// the first account that signs in.
 func (a *app) restoreUploadQueue() {
-	if a.uploadsRestored {
+	path := a.uploadQueuePath()
+	if a.uploadsRestored || path == "" {
 		return
 	}
 	a.uploadsRestored = true
-	path := a.uploadQueuePath()
-	if path == "" {
-		return
-	}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return
+		old := a.oldUploadQueuePath()
+		if b, err = os.ReadFile(old); err != nil {
+			return
+		}
+		os.Remove(old)
 	}
 	var q queuedUploads
 	if json.Unmarshal(b, &q) != nil {
@@ -368,5 +379,42 @@ func (a *app) restoreUploadQueue() {
 		a.toast = "继续上传上次没完成的歌曲"
 	}
 	a.pumpUpload()
+	a.saveUploadQueue()
 	a.redraw()
+}
+
+// uploadsFor gives the queue to the account now signed in, prof, or to
+// nobody. The songs of the account that was signed in stop going up, as
+// they would land on another's drive: they are kept for it, and go up
+// again once it signs back in.
+func (a *app) uploadsFor(prof *netease.Profile) {
+	var id int64
+	if prof != nil {
+		id = prof.UserID
+	}
+	if id != a.uploadUser {
+		if a.uploadUser != 0 {
+			a.leaveUploads()
+		}
+		a.uploadUser = id
+	}
+	a.restoreUploadQueue()
+}
+
+// leaveUploads stops the upload under way and puts the queue away for the
+// account it was for.
+func (a *app) leaveUploads() {
+	busy := a.uploadJob != nil || len(a.uploadQueue) > 0
+	a.saveUploadQueue()
+	if a.uploadCancel != nil {
+		a.uploadCancel()
+	}
+	a.uploadGen++
+	a.uploadJob, a.uploadCancel = nil, nil
+	a.uploadQueue, a.uploadFailed = nil, nil
+	a.uploadedSome = false
+	a.uploadsRestored = false
+	if busy {
+		a.toast = "账号已切换，已停止上传"
+	}
 }
