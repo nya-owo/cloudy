@@ -1,5 +1,29 @@
 # AGENTS.md
 
+## Code map
+
+- `main.go` starts `internal/app`. The UI is MyGo, an immediate-mode GPU framework: every frame is built again from the app's state.
+- `internal/netease`: the NetEase Cloud Music API (eapi encryption, login, playlists, song URLs, cloud drive). Pure Go but for `auth.go` (the keyring) and `eapi.go` (the device ID).
+- `internal/lyrics`: parsing LRC and word-by-word lyrics, merging translations. `internal/local`: reading audio files' tags. `internal/download`: downloading a song with its tags, cover and lyrics.
+- `internal/player`: playback, the queue, streaming and the cache, fades, loudness, the system's media controls.
+- `internal/speech`: podcast captions, through sherpa-onnx loaded with purego. The C structs in `sherpa.go` mirror sherpa-onnx's layout: keep fields even when they look unused.
+- `internal/app`: everything else, in one package around the `app` struct (`app.go`). Files are named for what they do; `ui_*.go` build views:
+  - Pages: `ui_pages.go` routes; `ui_discovery.go`, `ui_daily.go`, `ui_style_daily.go`, `ui_playlist.go`, `ui_album.go`, `ui_artist.go`, `ui_user.go`, `ui_mine.go`, `ui_search.go`, `ui_podcast.go`, `ui_radio.go`, `ui_recent.go`, `ui_cloud.go`, `ui_downloads.go`.
+  - Player: `ui_player.go` (the bar), `ui_nowplaying.go` and `ui_stage*.go` (Now Playing and its lyric styles), `fullscreen.go`, `ui_float.go` (desktop lyrics and the mini window).
+  - Downloads: `downloads.go`, `downloads_more.go`, `ui_download_queue.go`. Cloud uploads: `cloud_upload.go`, `ui_upload_queue.go`.
+  - Settings: `settings.go` (the stored choices) and `ui_settings.go`; `session.go` and `history.go` keep the queue and what was played. Write such files with `writeFileAtomic`.
+  - Windows integration: `tray.go`, `thumbbar.go`, `taskbar_progress.go`, `keys.go` and `ui_shortcuts.go` (global shortcuts), `menu.go`, `updates.go` and `ui_update.go`.
+  - Account: `login.go`, `ui_account.go` (`signedIn` resets what is personal; `accountGen` drops replies meant for the account before).
+  - macOS only, kept from the original project: `ui_notch.go`, `notch_*.go`.
+
+### Threads
+
+The app's state is read and changed on the main thread only, so it has no locks. Work that blocks (the network, the disk) runs in a goroutine and hands its result back with `a.post(func() { ... })`, which runs on the main thread and redraws. Bump a generation counter (`accountGen`, `uploadGen`, ...) when starting work that a later action can make stale, and drop the result if it changed.
+
+### The framework
+
+MyGo is our fork, github.com/nya-owo/mygo, pinned by the `replace` in `go.mod`; the Windows taskbar thumbnail, tray, Windows 10 frame and update mirrors live there. Upstream egoist/mygo has moved far ahead: take single fixes from it by cherry-pick, don't merge it.
+
 ## Tests
 
 Only write a test for behaviour that can actually break. If the code under test could change without the test noticing, or the test would fail on a harmless rewording, don't write it.
