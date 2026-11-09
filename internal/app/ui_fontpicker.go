@@ -30,7 +30,7 @@ const moreFonts = "更多字体…"
 const fontPickerLimit = 200
 
 func (a *app) openFontPicker() {
-	p := &a.fontPick
+	p := &a.settingsView.fontPick
 	p.open, p.query, p.scroll = true, "", ui.ScrollState{}
 	p.names = systemFontNames()
 	a.redraw()
@@ -47,7 +47,7 @@ func (a *app) setFont(id string) {
 // fontPickerDialog lists the system's fonts, each in itself, to search and
 // choose from, and imports a font file.
 func (a *app) fontPickerDialog(c *ui.Context) {
-	p := &a.fontPick
+	p := &a.settingsView.fontPick
 	if !p.open {
 		return
 	}

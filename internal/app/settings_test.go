@@ -20,7 +20,7 @@ func TestSettingsCategoryNavigation(t *testing.T) {
 	defer fakeUpdateCheck(asked)()
 	a := newTestApp()
 	a.settings = defaultSettings()
-	a.settingsOpen, a.updates = true, true
+	a.settingsView.open, a.updates = true, true
 	tt := ui.NewTester(a.view, 1000, 700)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	tt.Frame()
@@ -30,15 +30,15 @@ func TestSettingsCategoryNavigation(t *testing.T) {
 			t.Fatal(err)
 		}
 		tt.Frame()
-		if a.settingsTab != want {
-			t.Fatalf("%s opened category %d", label, a.settingsTab)
+		if a.settingsView.tab != want {
+			t.Fatalf("%s opened category %d", label, a.settingsView.tab)
 		}
 	}
 	toggle := func(label, desc string) {
 		t.Helper()
 		title, ok1 := tt.Find(label)
 		note, ok2 := tt.Find(desc)
-		pane, ok3 := tt.Find(settingsCategories[a.settingsTab].label + "设置项")
+		pane, ok3 := tt.Find(settingsCategories[a.settingsView.tab].label + "设置项")
 		if !ok1 || !ok2 || !ok3 {
 			t.Fatalf("the %s control is not in this category", label)
 		}
@@ -52,16 +52,16 @@ func TestSettingsCategoryNavigation(t *testing.T) {
 	tt.Scroll(pane.X+40, pane.Y+pane.H/2, 0, 320)
 	tt.Advance(time.Second)
 	tt.Frame()
-	at := a.settingsScroll[settingsEffects].Y
+	at := a.settingsView.scroll[settingsEffects].Y
 	if at <= 0 {
 		t.Fatal("the effects category did not scroll")
 	}
 	choose("账号", settingsAccount)
-	if a.settingsScroll[settingsAccount].Y != 0 || a.settings.AccentCover == wasAccent {
+	if a.settingsView.scroll[settingsAccount].Y != 0 || a.settings.AccentCover == wasAccent {
 		t.Fatal("switching categories lost the edit or shared the scroll position")
 	}
 	choose("视觉效果", settingsEffects)
-	if math.Abs(float64(a.settingsScroll[settingsEffects].Y-at)) > 1 {
+	if math.Abs(float64(a.settingsView.scroll[settingsEffects].Y-at)) > 1 {
 		t.Fatal("returning to effects lost its scroll position")
 	}
 	choose("播放", settingsPlayback)
@@ -95,8 +95,8 @@ func TestSettingsCategoryFrames(t *testing.T) {
 		for category := settingsAccount; category < settingsCategoryCount; category++ {
 			a := newTestApp()
 			a.settings = defaultSettings()
-			a.settingsOpen, a.updates = true, true
-			a.settingsTab = category
+			a.settingsView.open, a.updates = true, true
+			a.settingsView.tab = category
 			a.profile = &netease.Profile{UserID: 1, Nickname: "试听者"}
 			tt := ui.NewTester(a.view, size.w, size.h)
 			tt.SetDark(true)
@@ -119,7 +119,7 @@ func TestSettingsCategoryFrames(t *testing.T) {
 func TestSettingsEveryCategory(t *testing.T) {
 	a := newTestApp()
 	a.settings = defaultSettings()
-	a.settingsOpen, a.updates = true, true
+	a.settingsView.open, a.updates = true, true
 	tt := ui.NewTester(a.view, 1000, 700)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	tt.Frame()
@@ -128,8 +128,8 @@ func TestSettingsEveryCategory(t *testing.T) {
 			t.Fatal(err)
 		}
 		tt.Frame()
-		if a.settingsTab != settingsCategory(i) {
-			t.Fatalf("%s opened category %d", cat.label, a.settingsTab)
+		if a.settingsView.tab != settingsCategory(i) {
+			t.Fatalf("%s opened category %d", cat.label, a.settingsView.tab)
 		}
 		if _, ok := tt.Find(cat.label + "设置项"); !ok {
 			t.Fatalf("%s shows no settings", cat.label)
@@ -152,13 +152,13 @@ func TestSettingsEveryCategory(t *testing.T) {
 func TestSettingsSearch(t *testing.T) {
 	a := newTestApp()
 	a.settings = defaultSettings()
-	a.settingsOpen, a.updates = true, true
+	a.settingsView.open, a.updates = true, true
 	tt := ui.NewTester(a.view, 1000, 700)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	tt.Frame()
 	search := func(q string) {
 		t.Helper()
-		a.settingsQuery = q
+		a.settingsView.query = q
 		tt.Frame()
 		tt.Frame()
 	}
@@ -183,7 +183,7 @@ func TestSettingsSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.settingsQuery != "" || a.settingsTab != settingsPlayback {
+	if a.settingsView.query != "" || a.settingsView.tab != settingsPlayback {
 		t.Fatal("choosing a category did not leave the search")
 	}
 }
@@ -225,8 +225,8 @@ func TestSettingsSearchFrames(t *testing.T) {
 	}{{"settings-search.png", "缓存", 0, true}, {"settings-light.png", "", settingsEffects, false}} {
 		a := newTestApp()
 		a.settings = defaultSettings()
-		a.settingsOpen, a.updates = true, true
-		a.settingsTab, a.settingsQuery = shot.tab, shot.query
+		a.settingsView.open, a.updates = true, true
+		a.settingsView.tab, a.settingsView.query = shot.tab, shot.query
 		tt := ui.NewTester(a.view, 1180, 780)
 		tt.SetDark(shot.dark)
 		tt.SetPreferences(ui.Preferences{ReduceMotion: true})
@@ -252,7 +252,7 @@ func TestScrobbleNotOpen(t *testing.T) {
 	a.settings = defaultSettings()
 	a.settings.Scrobble = true
 	a.profile = &netease.Profile{UserID: 1, Nickname: "试听者"}
-	a.settingsOpen, a.settingsTab = true, settingsAccount
+	a.settingsView.open, a.settingsView.tab = true, settingsAccount
 	tt := ui.NewTester(a.view, 1000, 700)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
 	tt.Frame()
@@ -303,7 +303,7 @@ func TestFeedbackMailClosed(t *testing.T) {
 	}
 	a := newTestApp()
 	a.settings = defaultSettings()
-	a.settingsOpen, a.settingsTab = true, settingsAbout
+	a.settingsView.open, a.settingsView.tab = true, settingsAbout
 	a.feedback.text = "你好"
 	tt := ui.NewTester(a.view, 1100, 900)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})

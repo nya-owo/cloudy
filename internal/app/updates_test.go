@@ -37,7 +37,7 @@ func TestUpdateSettings(t *testing.T) {
 	a := newTestApp()
 	a.settings = defaultSettings()
 	a.updates = true
-	a.settingsTab = settingsAbout
+	a.settingsView.tab = settingsAbout
 	tt := ui.NewTester(a.settingsBody, 560, 3000)
 	tt.Frame()
 	// The row's title is labelled as its switch is: click the switch, at
@@ -72,7 +72,7 @@ func TestCheckForUpdatesFromSettings(t *testing.T) {
 	a := newTestApp()
 	a.settings = defaultSettings()
 	a.updates = true
-	a.settingsTab = settingsAbout
+	a.settingsView.tab = settingsAbout
 	a.profile = &netease.Profile{UserID: 1}
 	tt := ui.NewTester(a.settingsBody, 560, 3000)
 	tt.Frame()

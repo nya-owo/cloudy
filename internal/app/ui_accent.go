@@ -91,7 +91,7 @@ type accentPick struct {
 // accentDialog picks a color of the listener's own: a color well as AppKit's,
 // whose color the app takes at once, and keeps when the well closes.
 func (a *app) accentDialog(c *ui.Context) {
-	d := &a.accentDraft
+	d := &a.settingsView.accentDraft
 	if !d.open && !d.dirty {
 		return
 	}

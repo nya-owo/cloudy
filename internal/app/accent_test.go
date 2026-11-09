@@ -119,7 +119,7 @@ func TestAccentFrames(t *testing.T) {
 		a := newTestApp()
 		accentHome(a)
 		a.settings.Accent = "#D97757"
-		a.settingsOpen, a.settingsTab = true, settingsAppearance
+		a.settingsView.open, a.settingsView.tab = true, settingsAppearance
 		tt := ui.NewTester(a.view, 1280, 820)
 		tt.SetDark(dark)
 		save("accent-settings-"+appearance, tt)

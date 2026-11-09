@@ -44,7 +44,7 @@ func TestSettingsOverTheWindow(t *testing.T) {
 	tt.Key(0, ui.KeyEscape)
 	tt.Advance(time.Second)
 	tt.Frame()
-	if _, ok := tt.Find("设置分类：账号"); a.settingsOpen || ok {
+	if _, ok := tt.Find("设置分类：账号"); a.settingsView.open || ok {
 		t.Error("Escape did not close the settings")
 	}
 }

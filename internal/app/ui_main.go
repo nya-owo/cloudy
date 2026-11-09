@@ -28,7 +28,7 @@ func (a *app) view(c *ui.Context) {
 	}
 	p := a.pal
 	t.Accent, t.AccentText = p.accent, p.onAccent
-	if accent, ok := a.coverAccent(); ok && a.settingsOpen {
+	if accent, ok := a.coverAccent(); ok && a.settingsView.open {
 		// The settings' switches take the color of what plays, a little
 		// quieter, not to outshine the rest of the pane.
 		t.Accent = accent.Mix(ui.RGB(128, 128, 128), 0.22)
@@ -46,7 +46,7 @@ func (a *app) view(c *ui.Context) {
 		c.Root().Background(ui.Transparent)
 	}
 	root := ui.Box(c).Fill()
-	if !c.Focused(a.searchBox) && !c.Focused(a.filterBox) && !c.Focused(a.dl.box) && !c.Focused(a.mineView.box) && !c.Focused(a.settingsSearchBox) {
+	if !c.Focused(a.searchBox) && !c.Focused(a.filterBox) && !c.Focused(a.dl.box) && !c.Focused(a.mineView.box) && !c.Focused(a.settingsView.searchBox) {
 		// Space plays and pauses wherever the focus is, as in Music. On
 		// the container around everything, it comes before a button the
 		// pointer focused, which would take Space as a click; on the

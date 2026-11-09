@@ -154,13 +154,13 @@ func (a *app) startModelDownload() {
 			shown = done
 			a.post(func() {
 				m.done, m.total = done, total
-				if a.settingsOpen {
+				if a.settingsView.open {
 					a.redraw()
 				}
 			})
 		})
 		a.post(func() {
-			if a.settingsOpen {
+			if a.settingsView.open {
 				a.redraw()
 			}
 			m.downloading, m.cancel = false, nil

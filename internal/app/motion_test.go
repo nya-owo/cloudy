@@ -164,7 +164,7 @@ func TestOtherMotionFrames(t *testing.T) {
 		{"menu open", func(a *app) { a.openMenu(300, 200, 200, false, menu, nil) }},
 		{"menu close", func(a *app) { a.menu.open = false }},
 		{"settings open", func(a *app) { a.openSettings() }},
-		{"settings close", func(a *app) { a.settingsOpen = false }},
+		{"settings close", func(a *app) { a.settingsView.open = false }},
 		{"volume open", func(a *app) { a.volumeOpen = true }},
 		{"volume close", func(a *app) { a.volumeOpen = false }},
 		{"collapse", func(a *app) { a.mineCollapsed = true }},
@@ -343,11 +343,11 @@ func TestDialogComesAndGoes(t *testing.T) {
 		}
 		return n
 	}
-	a.settingsOpen = true
+	a.settingsView.open = true
 	if n := moves(); n < 6 {
 		t.Errorf("it came in over %d frames", n)
 	}
-	a.settingsOpen = false
+	a.settingsView.open = false
 	if n := moves(); n < 6 {
 		t.Errorf("it went over %d frames", n)
 	}

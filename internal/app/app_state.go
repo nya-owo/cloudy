@@ -53,3 +53,18 @@ type shortcutState struct {
 	paused bool             // the global keys and menu keys are let go, for a recording
 	items  []*mygo.MenuItem // the menu items with keys of their own
 }
+
+// settingsView is the state of the settings panel, apart from the settings.
+type settingsView struct {
+	open   bool
+	tab    settingsCategory
+	scroll [settingsCategoryCount]ui.ScrollState
+	// query is what is searched in the settings, searchBox its field, and
+	// searchScroll how far what it found is scrolled.
+	query        string
+	searchBox    ui.Handle
+	searchScroll ui.ScrollState
+	dirty        bool       // a slider moved, and the settings are not kept yet
+	accentDraft  accentPick // the color well open, and the color it shows
+	fontPick     fontPicker // the dialog of the system's fonts
+}

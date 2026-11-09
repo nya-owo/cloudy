@@ -40,7 +40,7 @@ var (
 )
 
 // applyGlobalKeys registers the keys that work from any app, or lets them go.
-// Other apps may hold all of those of something, which keysTaken counts.
+// Other apps may hold all of those of something, which keys.taken counts.
 func (a *app) applyGlobalKeys() {
 	for _, key := range a.keys.held {
 		unregisterShortcut(key)

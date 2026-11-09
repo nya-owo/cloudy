@@ -60,15 +60,15 @@ var dangerColor = ui.Hex("#e5484d")
 func (a *app) openSettings() {
 	a.measureCache()
 	a.dl.pathDraft = a.downloadFolder()
-	a.settingsQuery = ""
-	a.settingsOpen = true
+	a.settingsView.query = ""
+	a.settingsView.open = true
 	a.showMain()
 	a.redraw()
 }
 
 // openSettingsAt shows the settings at a category.
 func (a *app) openSettingsAt(category settingsCategory) {
-	a.settingsTab = category
+	a.settingsView.tab = category
 	a.openSettings()
 }
 
@@ -90,13 +90,13 @@ func (a *app) changed() {
 func (a *app) settingsPanel(c *ui.Context) {
 	w, h := c.Size()
 	ink := a.inkOn(false)
-	a.dialog(c, "settings", 0.3, &a.settingsOpen, func(panel ui.Element) {
+	a.dialog(c, "settings", 0.3, &a.settingsView.open, func(panel ui.Element) {
 		// It grows from the corner of who listens, whose row opens it.
 		panel.Width(min(940, w-48)).Height(max(h-72, 320)).TextColor(ink.text).Label("设置").TransformOrigin(0, 1)
 		a.pane(panel, 26, false)
 		panel.Children(func() {
-			where := settingsCategories[a.settingsTab].label
-			if strings.TrimSpace(a.settingsQuery) != "" {
+			where := settingsCategories[a.settingsView.tab].label
+			if strings.TrimSpace(a.settingsView.query) != "" {
 				where = "搜索结果"
 			}
 			ui.Row(c).Height(68).Padding(0, 20, 0, 34).Gap(10).AlignItems(ui.Center).Children(func() {
@@ -104,7 +104,7 @@ func (a *app) settingsPanel(c *ui.Context) {
 				ui.Text(c, "/").FontSize(15).TextColor(ink.faint)
 				ui.Text(c, where).FontSize(15).TextColor(ink.muted).Grow(1)
 				if iconButton(c.Key("close"), iconX, 16, ink.muted, "关闭").Clicked() {
-					a.settingsOpen = false
+					a.settingsView.open = false
 				}
 			})
 			ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
@@ -119,20 +119,20 @@ func (a *app) settingsPanel(c *ui.Context) {
 // visible while their contents scroll.
 func (a *app) settingsSidebar(c *ui.Context) {
 	ink := a.inkOn(false)
-	searching := strings.TrimSpace(a.settingsQuery) != ""
+	searching := strings.TrimSpace(a.settingsView.query) != ""
 	ui.Column(c.Key("settings-nav")).Width(208).Shrink(0).Padding(2, 12, 16, 22).Gap(3).Label("设置分类").Children(func() {
 		field := ui.Row(c.Key("settings-search")).Height(36).PaddingX(12).Gap(8).Radius(999).AlignItems(ui.Center).
 			Background(ink.hover).Border(0.5, ink.line).Margin(0, 0, 10, 0)
 		field.Children(func() {
 			ui.Icon(c, iconSearch).Size(15, 15).Shrink(0).TextColor(ink.muted)
-			in := ui.TextInputBase(c.Key("settings-query"), &a.settingsQuery).Bind(&a.settingsSearchBox).Grow(1).MinWidth(0).
+			in := ui.TextInputBase(c.Key("settings-query"), &a.settingsView.query).Bind(&a.settingsView.searchBox).Grow(1).MinWidth(0).
 				FontSize(13).Label("搜索设置").Placeholder("搜索设置")
 			if in.Changed() {
-				a.settingsSearchScroll = ui.ScrollState{}
+				a.settingsView.searchScroll = ui.ScrollState{}
 			}
-			if a.settingsQuery != "" {
+			if a.settingsView.query != "" {
 				if iconButton(c.Key("settings-clear"), iconX, 11, ink.muted, "清除搜索").Size(22, 22).Clicked() {
-					a.settingsQuery = ""
+					a.settingsView.query = ""
 				}
 			}
 		})
@@ -149,7 +149,7 @@ func (a *app) settingsNavItems(c *ui.Context, ink paneInk, searching bool) {
 		if settingsCategory(i) == settingsAbout {
 			ui.Box(c).Height(0.5).Background(ink.line).Margin(10, 10, 8, 10)
 		}
-		selected := a.settingsTab == settingsCategory(i) && !searching
+		selected := a.settingsView.tab == settingsCategory(i) && !searching
 		button := ui.ButtonBase(c.Key(category.label)).Height(40).PaddingX(14).Gap(12).Radius(14).
 			AlignItems(ui.Center).Justify(ui.Start).Label("设置分类：" + category.label).Selected(selected)
 		bg, color, weight := ui.Transparent, ink.muted, 500
@@ -176,8 +176,8 @@ func (a *app) settingsNavItems(c *ui.Context, ink paneInk, searching bool) {
 			ui.Text(c, category.label).FontSize(14).FontWeight(weight)
 		})
 		if button.Clicked() {
-			a.settingsTab = settingsCategory(i)
-			a.settingsQuery = ""
+			a.settingsView.tab = settingsCategory(i)
+			a.settingsView.query = ""
 		}
 	}
 }
@@ -416,15 +416,15 @@ func (k *settingsKit) toggle(key, label string, on *bool, disabled bool, then fu
 // settingsBody shows one category, keeping its scroll position between
 // visits, or while the listener searches, what matches in all of them.
 func (a *app) settingsBody(c *ui.Context) {
-	k := &settingsKit{a: a, c: c, ink: a.inkOn(false), query: strings.ToLower(strings.TrimSpace(a.settingsQuery))}
+	k := &settingsKit{a: a, c: c, ink: a.inkOn(false), query: strings.ToLower(strings.TrimSpace(a.settingsView.query))}
 	k.searching = k.query != ""
-	key, scroll, label := any(a.settingsTab), &a.settingsScroll[a.settingsTab], settingsCategories[a.settingsTab].label
+	key, scroll, label := any(a.settingsView.tab), &a.settingsView.scroll[a.settingsView.tab], settingsCategories[a.settingsView.tab].label
 	if k.query != "" {
-		key, scroll, label = "search", &a.settingsSearchScroll, "搜索"
+		key, scroll, label = "search", &a.settingsView.searchScroll, "搜索"
 	}
 	ui.Scroll(c.Key(key)).Label(label+"设置项").TrackScroll(scroll).Grow(1).Shrink(1).MinWidth(0).Padding(0, 30, 30, 18).Children(func() {
 		if k.query == "" {
-			ui.Column(c.Key(a.settingsTab)).Margin(-12, 0, 0, 0).Children(func() { a.settingsPage(k, a.settingsTab) })
+			ui.Column(c.Key(a.settingsView.tab)).Margin(-12, 0, 0, 0).Children(func() { a.settingsPage(k, a.settingsView.tab) })
 			return
 		}
 		found := false
@@ -444,7 +444,7 @@ func (a *app) settingsBody(c *ui.Context) {
 		if !found {
 			ui.Column(c).Padding(80, 0).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, iconSearch).Size(28, 28).TextColor(k.ink.faint)
-				ui.Text(c, "没有找到「"+strings.TrimSpace(a.settingsQuery)+"」相关的设置").FontSize(14).TextColor(k.ink.muted)
+				ui.Text(c, "没有找到「"+strings.TrimSpace(a.settingsView.query)+"」相关的设置").FontSize(14).TextColor(k.ink.muted)
 			})
 		}
 	})
@@ -485,7 +485,7 @@ func (a *app) settingsAccountPage(k *settingsKit) {
 		if a.profile == nil {
 			k.row("未登录", "登录后，每日推荐与歌单将根据你的口味生成", func() {
 				if ui.PrimaryButton(c.Key("login"), "扫码登录").Clicked() {
-					a.settingsOpen = false
+					a.settingsView.open = false
 					a.openLogin()
 				}
 			})
@@ -716,7 +716,7 @@ func (a *app) settingsAppearancePage(k *settingsKit) {
 				if hex := a.chosenAccent(); hex != "" {
 					draft = ui.Hex(hex)
 				}
-				a.accentDraft = accentPick{open: true, color: draft}
+				a.settingsView.accentDraft = accentPick{open: true, color: draft}
 				a.redraw()
 			}
 		})
@@ -963,7 +963,7 @@ func (a *app) settingsSystemPage(k *settingsKit) {
 	k.group("小窗口", func() {
 		k.row("迷你窗口", "用一个置顶的小窗口代替主窗口；托盘菜单里也能打开", func() {
 			if k.button("mini", "打开", nil, false, false).Clicked() {
-				a.settingsOpen = false
+				a.settingsView.open = false
 				a.showMini()
 			}
 		})
@@ -1012,12 +1012,12 @@ func (a *app) settingSlider(c *ui.Context, label string, v *float64, on bool, in
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Opacity(opacity).Children(func() {
 		s := ui.SliderBase(c.Key("slider"), v, 0, 1).Width(150).Height(22).Step(0.01).FocusRing(false).Label(label).Disabled(!on).Cursor(ui.CursorPointer)
 		if s.Changed() {
-			a.settingsDirty = true
+			a.settingsView.dirty = true
 			a.redraw()
 		}
 		held := s.Pressed()
-		if a.settingsDirty && !held {
-			a.settingsDirty = false
+		if a.settingsView.dirty && !held {
+			a.settingsView.dirty = false
 			a.settings.save()
 		}
 		thick := float32(4)
