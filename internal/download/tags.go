@@ -272,7 +272,7 @@ func tagFLAC(src []byte, t Tags) ([]byte, error) {
 		binary.Write(&pic, binary.BigEndian, uint32(len(mime)))
 		pic.WriteString(mime)
 		binary.Write(&pic, binary.BigEndian, uint32(0)) // no description
-		pic.Write(make([]byte, 16))                      // size and colors, unknown
+		pic.Write(make([]byte, 16))                     // size and colors, unknown
 		binary.Write(&pic, binary.BigEndian, uint32(len(t.Cover)))
 		pic.Write(t.Cover)
 		if pic.Len() < 1<<24 {

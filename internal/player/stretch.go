@@ -34,11 +34,11 @@ type stretch struct {
 }
 
 const (
-	stretchN     = 1024           // frames a piece
-	stretchHop   = stretchN / 2   // frames between pieces laid down
-	stretchSeek  = 160            // how far from where the speed says a piece may start
-	stretchMatch = stretchN / 2   // frames compared to find where it best continues
-	stretchStep  = 2              // of which every second
+	stretchN     = 1024         // frames a piece
+	stretchHop   = stretchN / 2 // frames between pieces laid down
+	stretchSeek  = 160          // how far from where the speed says a piece may start
+	stretchMatch = stretchN / 2 // frames compared to find where it best continues
+	stretchStep  = 2            // of which every second
 )
 
 func newStretch(d audio.Decoder, speed float64) *stretch {

@@ -53,9 +53,9 @@ type Player struct {
 	// listener moves on from it or it plays to its end.
 	Listened func(t netease.Track, played time.Duration, ended bool)
 
-	stretcher *stretch // between the stream and what plays, for a speed
-	curSpeed  float64  // the speed the track playing plays at
-	heardGen  int      // the load whose listening was told, so it is told once
+	stretcher *stretch                // between the stream and what plays, for a speed
+	curSpeed  float64                 // the speed the track playing plays at
+	heardGen  int                     // the load whose listening was told, so it is told once
 	fx        atomic.Pointer[Effects] // the effects, which every track's sound goes through
 	fxGlide   atomic.Bool             // the effects asked for glide to what they are
 

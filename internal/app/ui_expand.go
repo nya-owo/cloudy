@@ -557,4 +557,3 @@ func (a *app) rowGlow(row ui.Element) {
 			From: accent.Alpha(min((0.1+0.14*bass)*gain, 1)), To: accent.Alpha(0)}, 14)
 	})
 }
-

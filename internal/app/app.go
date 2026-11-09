@@ -121,25 +121,25 @@ type app struct {
 	searched    route                 // the search last shown, which the sidebar goes back to
 	suggestions suggestState          // what the search field's query may be after
 
-	nowPlaying  bool
-	npFull      bool      // Now Playing taking the whole screen
-	fullHintAt  time.Time // when the bubble telling of F11 first showed in this run
-	sysAccent   string    // the desktop's accent as #RRGGBB, "" where it has none
-	npOpen      bool      // Now Playing as it last showed: open or not
-	npChangedAt time.Time // when it last opened or closed
-	npPane      int       // paneLyrics, paneQueue, paneStage, paneComments, paneProgram or paneCaptions
-	npPaneTop   float32   // how far the cover beside the pane starts below its top
-	lyricScroll ui.ScrollState
-	lyricGlide  lyricGlide
-	lyricAt     int
-	lyricTrack  int64
-	queueList   ui.ListState
-	queueAt     int // the row of the queue pane last scrolled to, -1 while it is hidden
-	loginKnown  *bool // whether the app starts at login, once asked
-	sideDragging bool // the sidebar's edge is being dragged
-	shownTracks []netease.Track // the songs the page lists now, for choosing among them
-	recent      recentState     // the songs played on this computer
-	cloud       cloudState      // the listener's music cloud drive
+	nowPlaying   bool
+	npFull       bool      // Now Playing taking the whole screen
+	fullHintAt   time.Time // when the bubble telling of F11 first showed in this run
+	sysAccent    string    // the desktop's accent as #RRGGBB, "" where it has none
+	npOpen       bool      // Now Playing as it last showed: open or not
+	npChangedAt  time.Time // when it last opened or closed
+	npPane       int       // paneLyrics, paneQueue, paneStage, paneComments, paneProgram or paneCaptions
+	npPaneTop    float32   // how far the cover beside the pane starts below its top
+	lyricScroll  ui.ScrollState
+	lyricGlide   lyricGlide
+	lyricAt      int
+	lyricTrack   int64
+	queueList    ui.ListState
+	queueAt      int             // the row of the queue pane last scrolled to, -1 while it is hidden
+	loginKnown   *bool           // whether the app starts at login, once asked
+	sideDragging bool            // the sidebar's edge is being dragged
+	shownTracks  []netease.Track // the songs the page lists now, for choosing among them
+	recent       recentState     // the songs played on this computer
+	cloud        cloudState      // the listener's music cloud drive
 	// The songs going up to the cloud drive, as downloads come down.
 	uploadQueue     []cloudUpload
 	uploadJob       *uploadJob
@@ -149,23 +149,23 @@ type app struct {
 	uploadsRestored bool
 	uploadedSome    bool // a song went up since the drive was last read
 	uploadView      uploadQueueView
-	outputList  outputList // the audio outputs, as last listed
-	comments    commentState
-	tabCount    rollState // the count on the comments' tab, as it rolls
+	outputList      outputList // the audio outputs, as last listed
+	comments        commentState
+	tabCount        rollState // the count on the comments' tab, as it rolls
 
 	fmMode        int // the FM mode chosen, in fmModes
 	fmCoversState fmCoverStack
 	radioStarting string // the radio asked for its first songs, or ""
 	radioGen      int    // distinguishes requests for the same radio
 
-	scrub      float64
-	scrubbing  bool
-	volume     float64
-	volumeOpen bool // the volume popover of the player bar shows
-	volumeHover hoverOpen // how the pointer opened it, and when it last was over it
+	scrub       float64
+	scrubbing   bool
+	volume      float64
+	volumeOpen  bool        // the volume popover of the player bar shows
+	volumeHover hoverOpen   // how the pointer opened it, and when it last was over it
 	effects     effectsView // the pane of the sound effects
 	auto        autoState   // the effects chosen for the song playing
-	mutedFrom  float64
+	mutedFrom   float64
 
 	rowBars barState
 	// underTop and underBottom say whether the page has content under its
@@ -199,30 +199,30 @@ type app struct {
 	shortcutKeys          map[string]string // the global key registered for each action
 	registeredKeys        []string          // the global keys held, to let them go
 	shortcutSetup         shortcutEditor
-	keysPaused            bool              // the global keys and menu keys are let go, for a recording
-	keyedItems            []*mygo.MenuItem  // the menu items with keys of their own
-	spin                  discState     // how far the bar's cover has turned
-	npPointer             bool          // the pointer is over Now Playing
-	headAt                ui.Rect       // where the cover of the page's header is
-	cameFrom              cardOrigin    // the card this page was opened from
-	restoreY              float32       // how far to scroll the page coming back
-	fontsAsked            bool          // the fonts that come as files were asked for
-	plView                plView        // how the playlist open is searched and sorted
-	headGone              float32       // how far the page's header has scrolled away
-	rowsRoute             route         // the page whose list last came in
-	rowsAt                time.Time     // when it started to
-	sideColor             ui.Color      // what the sidebar shows, as it eases
-	sideEdge              ui.Color      // what its list fades to, under its edges
-	flight                coverFlight   // a cover on its way to the page it opens
-	heldRoute             route         // the page opened from a card
-	heldURL               string        // and the cover the card gave it
-	playSpot              ui.Rect       // where the play button last built is
-	backdropCache         backdropCache // the backdrop of Now Playing, as last painted
-	npArt                 *artwork      // the cover whose colors Now Playing shows
-	npCoverState          coverState    // the cover of Now Playing, as it is tilted and flicked
-	wallState             wallState     // the wall of the queue's covers, as it is dragged
-	quiet                 quietState    // the quiet parts of the song playing, for its hot comments
-	captions              captionState  // the episode playing's captions, and the model that writes them
+	keysPaused            bool             // the global keys and menu keys are let go, for a recording
+	keyedItems            []*mygo.MenuItem // the menu items with keys of their own
+	spin                  discState        // how far the bar's cover has turned
+	npPointer             bool             // the pointer is over Now Playing
+	headAt                ui.Rect          // where the cover of the page's header is
+	cameFrom              cardOrigin       // the card this page was opened from
+	restoreY              float32          // how far to scroll the page coming back
+	fontsAsked            bool             // the fonts that come as files were asked for
+	plView                plView           // how the playlist open is searched and sorted
+	headGone              float32          // how far the page's header has scrolled away
+	rowsRoute             route            // the page whose list last came in
+	rowsAt                time.Time        // when it started to
+	sideColor             ui.Color         // what the sidebar shows, as it eases
+	sideEdge              ui.Color         // what its list fades to, under its edges
+	flight                coverFlight      // a cover on its way to the page it opens
+	heldRoute             route            // the page opened from a card
+	heldURL               string           // and the cover the card gave it
+	playSpot              ui.Rect          // where the play button last built is
+	backdropCache         backdropCache    // the backdrop of Now Playing, as last painted
+	npArt                 *artwork         // the cover whose colors Now Playing shows
+	npCoverState          coverState       // the cover of Now Playing, as it is tilted and flicked
+	wallState             wallState        // the wall of the queue's covers, as it is dragged
+	quiet                 quietState       // the quiet parts of the song playing, for its hot comments
+	captions              captionState     // the episode playing's captions, and the model that writes them
 	sig                   playerSig
 	quitting              bool
 
@@ -235,14 +235,14 @@ type app struct {
 	settingsQuery        string
 	settingsSearchBox    ui.Handle
 	settingsSearchScroll ui.ScrollState
-	settingsDirty  bool            // a slider moved, and the settings are not kept yet
-	accentDraft    accentPick      // the color well open, and the color it shows
-	update         updateState     // the update pane, and the update it found
-	cacheUsed      int64           // the bytes the song cache takes, -1 until measured
-	updates        bool            // the update plugin is used (useUpdater)
-	fontList       []uiFont        // the fonts on offer here (fontChoices)
-	fontsLoaded    map[string]bool // the fonts of files registered, by id (loadFont)
-	fontPick       fontPicker      // the dialog of the system's fonts
+	settingsDirty        bool            // a slider moved, and the settings are not kept yet
+	accentDraft          accentPick      // the color well open, and the color it shows
+	update               updateState     // the update pane, and the update it found
+	cacheUsed            int64           // the bytes the song cache takes, -1 until measured
+	updates              bool            // the update plugin is used (useUpdater)
+	fontList             []uiFont        // the fonts on offer here (fontChoices)
+	fontsLoaded          map[string]bool // the fonts of files registered, by id (loadFont)
+	fontPick             fontPicker      // the dialog of the system's fonts
 
 	// The songs saved to disk, the ones on their way there, and where both
 	// are kept.
@@ -256,8 +256,8 @@ type app struct {
 	downloadFailed    []failedDownload // songs that failed to download, to try again
 	downloadsRestored bool             // the queue left at the last quit is picked up
 	downloadsFixed    bool             // the downloads without tags were looked at
-	downloadArtDir    string // where covers found in the folder are kept
-	downloadIndex     string // where the index of downloaded songs is kept
+	downloadArtDir    string           // where covers found in the folder are kept
+	downloadIndex     string           // where the index of downloaded songs is kept
 	downloadBox       ui.Handle
 	downloadPathDraft string // the folder path being typed in the settings
 	queueView         downloadQueueView

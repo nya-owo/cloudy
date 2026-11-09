@@ -276,7 +276,6 @@ type hoverOpen struct {
 // a pointer passing from the speaker up to the slider, or out a moment.
 const volumeLinger = 350 * time.Millisecond
 
-
 // popover holds the colors of a popover as AppKit draws them.
 type popover struct {
 	fill, edge, track, knob ui.Color

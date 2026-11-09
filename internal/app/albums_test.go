@@ -131,5 +131,3 @@ func TestAlbumFrames(t *testing.T) {
 		save("albums-detail-"+appearance, bt)
 	}
 }
-
-
