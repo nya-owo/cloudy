@@ -18,8 +18,8 @@ func testDownloadApp(t *testing.T) *app {
 	a := newTestApp()
 	a.settings = defaultSettings()
 	a.settings.DownloadFolder = filepath.Join(t.TempDir(), "Downloads")
-	a.downloadIndex = filepath.Join(t.TempDir(), "downloads.json")
-	a.downloadsLoaded = true
+	a.dl.index = filepath.Join(t.TempDir(), "downloads.json")
+	a.dl.loaded = true
 	return a
 }
 
@@ -34,7 +34,7 @@ func TestDownloadedTracksPlayLocally(t *testing.T) {
 		Fee:       1,
 		Privilege: &netease.Privilege{St: 0, Pl: 0},
 	}
-	a.downloads = []download.Item{{Track: tr, Path: filepath.Join("C:", "Music", "下载测试.mp3")}}
+	a.dl.items = []download.Item{{Track: tr, Path: filepath.Join("C:", "Music", "下载测试.mp3")}}
 	tracks := a.downloadTracks()
 	if len(tracks) != 1 {
 		t.Fatalf("tracks %+v", tracks)
@@ -52,7 +52,7 @@ func TestDownloadWithoutPermission(t *testing.T) {
 		Name:      "会员歌曲",
 		Privilege: &netease.Privilege{St: 0, Pl: 0},
 	})
-	if a.downloadQ.running != nil || len(a.downloadQ.waiting) != 0 {
+	if a.dl.queue.running != nil || len(a.dl.queue.waiting) != 0 {
 		t.Fatal("queued a song without permission")
 	}
 	if a.toast != "这首歌暂时没有下载权限" {
@@ -83,8 +83,8 @@ func TestDownloadFromSongMenu(t *testing.T) {
 	if err := chooseItem(tt, "下载到本机"); err != nil {
 		t.Fatal(err)
 	}
-	if a.downloadQ.running == nil || a.downloadQ.running.ID != 2 {
-		t.Fatalf("job %+v, toast %q, queue %+v, downloads %+v", a.downloadQ.running, a.toast, a.downloadQ.waiting, a.downloads)
+	if a.dl.queue.running == nil || a.dl.queue.running.ID != 2 {
+		t.Fatalf("job %+v, toast %q, queue %+v, downloads %+v", a.dl.queue.running, a.toast, a.dl.queue.waiting, a.dl.items)
 	}
 	a.startDownload(netease.Track{ID: 2, Name: "宝船"})
 	if a.toast != "这首歌正在下载" {
@@ -101,7 +101,7 @@ func TestDownloadedSongPlays(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := testDownloadApp(t)
-	a.downloads = []download.Item{{
+	a.dl.items = []download.Item{{
 		Track: netease.Track{
 			ID: 9, Name: "下载测试", Duration: 1000,
 			Artists:   []netease.Artist{{Name: "测试歌手"}},
@@ -142,13 +142,13 @@ func TestDownloadsScanFindsFile(t *testing.T) {
 	if err := os.WriteFile(path, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a.downloadArtDir = t.TempDir()
-	a.downloadsLoaded = false
+	a.dl.artDir = t.TempDir()
+	a.dl.loaded = false
 	a.loadDownloads(true)
-	if len(a.downloads) != 1 || a.downloads[0].Path != path {
-		t.Fatalf("downloads %+v", a.downloads)
+	if len(a.dl.items) != 1 || a.dl.items[0].Path != path {
+		t.Fatalf("downloads %+v", a.dl.items)
 	}
-	if _, err := os.Stat(a.downloadIndex); err != nil {
+	if _, err := os.Stat(a.dl.index); err != nil {
 		t.Errorf("index: %v", err)
 	}
 }
@@ -179,16 +179,16 @@ func TestDownloadFolderSwitchReadsOnlyNewFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.setDownloadFolder(dirA)
-	if len(a.downloads) != 1 || a.downloads[0].Path != pathA {
-		t.Fatalf("first folder: %+v", a.downloads)
+	if len(a.dl.items) != 1 || a.dl.items[0].Path != pathA {
+		t.Fatalf("first folder: %+v", a.dl.items)
 	}
 	a.setDownloadFolder(dirB)
-	if len(a.downloads) != 1 || a.downloads[0].Path != pathB {
-		t.Fatalf("second folder: %+v", a.downloads)
+	if len(a.dl.items) != 1 || a.dl.items[0].Path != pathB {
+		t.Fatalf("second folder: %+v", a.dl.items)
 	}
 	a.loadDownloads(true)
-	if len(a.downloads) != 1 || a.downloads[0].Path != pathB {
-		t.Fatalf("after rescan: %+v", a.downloads)
+	if len(a.dl.items) != 1 || a.dl.items[0].Path != pathB {
+		t.Fatalf("after rescan: %+v", a.dl.items)
 	}
 }
 
@@ -201,13 +201,13 @@ func TestDownloadFolderSet(t *testing.T) {
 	if a.settings.DownloadFolder != dir || a.downloadFolder() != dir {
 		t.Fatalf("folder %q, setting %q", a.downloadFolder(), a.settings.DownloadFolder)
 	}
-	if a.downloadPathDraft != dir {
-		t.Errorf("the input still shows %q", a.downloadPathDraft)
+	if a.dl.pathDraft != dir {
+		t.Errorf("the input still shows %q", a.dl.pathDraft)
 	}
 	// A whole disk is not a folder to fill with songs.
 	a.setDownloadFolder(filepath.VolumeName(dir) + string(filepath.Separator))
-	if a.settings.DownloadFolder != dir || a.downloadPathDraft != dir {
-		t.Errorf("a volume root was taken: %q, input %q", a.settings.DownloadFolder, a.downloadPathDraft)
+	if a.settings.DownloadFolder != dir || a.dl.pathDraft != dir {
+		t.Errorf("a volume root was taken: %q, input %q", a.settings.DownloadFolder, a.dl.pathDraft)
 	}
 	a.setDownloadFolder("")
 	if a.settings.DownloadFolder != "" || a.downloadFolder() != a.defaultDownloadFolder() {
@@ -226,7 +226,7 @@ func TestDownloadedSongMenu(t *testing.T) {
 		t.Fatal(err)
 	}
 	tr := netease.Track{ID: 7, Name: "已经下载"}
-	a.downloads = []download.Item{{Track: tr, Path: path}}
+	a.dl.items = []download.Item{{Track: tr, Path: path}}
 	check := func(groups [][]menuAction) (download, remove bool) {
 		for _, group := range groups {
 			for _, act := range group {
@@ -257,17 +257,17 @@ func TestDeleteDownload(t *testing.T) {
 		t.Fatal(err)
 	}
 	tr := netease.Track{ID: 8, Name: "要删除"}
-	a.downloads = []download.Item{{Track: tr, Path: path}}
+	a.dl.items = []download.Item{{Track: tr, Path: path}}
 	a.confirmDeleteDownload(tr)
-	if !a.downloadDelete.open {
+	if !a.dl.deletion.open {
 		t.Fatal("no delete confirmation")
 	}
 	a.deleteDownload()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("file still there: %v", err)
 	}
-	if len(a.downloads) != 0 {
-		t.Fatalf("downloads %+v", a.downloads)
+	if len(a.dl.items) != 0 {
+		t.Fatalf("downloads %+v", a.dl.items)
 	}
 }
 
@@ -284,7 +284,7 @@ func TestDownloadsBatchDelete(t *testing.T) {
 			t.Fatal(err)
 		}
 		paths = append(paths, path)
-		a.downloads = append(a.downloads, download.Item{Track: netease.Track{ID: int64(i + 1), Name: name}, Path: path})
+		a.dl.items = append(a.dl.items, download.Item{Track: netease.Track{ID: int64(i + 1), Name: name}, Path: path})
 	}
 	a.open(route{page: pageDownloads})
 	tt := ui.NewTester(a.view, 1200, 800)
@@ -307,7 +307,7 @@ func TestDownloadsBatchDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if !a.downloadDelete.open {
+	if !a.dl.deletion.open {
 		t.Fatal("no delete confirmation")
 	}
 	if err := tt.Click("删除"); err != nil {
@@ -319,7 +319,7 @@ func TestDownloadsBatchDelete(t *testing.T) {
 			t.Fatalf("%s still there: %v", path, err)
 		}
 	}
-	if len(a.downloads) != 0 || a.batch.on {
-		t.Fatalf("downloads %+v, batch %+v", a.downloads, a.batch)
+	if len(a.dl.items) != 0 || a.batch.on {
+		t.Fatalf("downloads %+v, batch %+v", a.dl.items, a.batch)
 	}
 }

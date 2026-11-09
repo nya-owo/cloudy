@@ -95,12 +95,12 @@ func matchDownload(tr netease.Track) (netease.Track, bool) {
 // lyrics and their menu back. It works one song at a time, off the main
 // thread, and keeps the index as it goes.
 func (a *app) fixDownloads() {
-	if a.downloadsFixed {
+	if a.dl.fixed {
 		return
 	}
-	a.downloadsFixed = true
+	a.dl.fixed = true
 	var todo []download.Item
-	for _, it := range a.downloads {
+	for _, it := range a.dl.items {
 		if !it.Tagged {
 			todo = append(todo, it)
 		}
@@ -121,9 +121,9 @@ func (a *app) fixDownloads() {
 			}
 			tagged := tagDownload(it)
 			a.post(func() {
-				for i := range a.downloads {
-					if downloadPathKey(a.downloads[i].Path) == downloadPathKey(it.Path) {
-						a.downloads[i].Track, a.downloads[i].Tagged = it.Track, tagged
+				for i := range a.dl.items {
+					if downloadPathKey(a.dl.items[i].Path) == downloadPathKey(it.Path) {
+						a.dl.items[i].Track, a.dl.items[i].Tagged = it.Track, tagged
 					}
 				}
 				a.saveDownloads()
@@ -152,16 +152,16 @@ func (a *app) downloadQueuePath() string {
 // downloading as the app quit, is downloaded once it opens again.
 func (a *app) saveDownloadQueue() {
 	var failed []failedDownload
-	for _, f := range a.downloadQ.failed {
+	for _, f := range a.dl.queue.failed {
 		failed = append(failed, failedDownload{f.item, f.reason})
 	}
-	saveQueueFile(a.downloadQueuePath(), a.downloadQ.kept(), failed)
+	saveQueueFile(a.downloadQueuePath(), a.dl.queue.kept(), failed)
 }
 
 // restoreDownloadQueue picks the queue up where the app left it, once the
 // listener's session is back: the songs they may download depend on it.
 func (a *app) restoreDownloadQueue() {
-	q := &a.downloadQ
+	q := &a.dl.queue
 	if q.restored {
 		return
 	}
@@ -185,7 +185,7 @@ func (a *app) restoreDownloadQueue() {
 // retryDownloads queues again the failed songs of ids, or all of them for
 // none.
 func (a *app) retryDownloads(ids ...int64) {
-	if n := a.downloadQ.retry(songKeys(ids)...); n > 0 {
+	if n := a.dl.queue.retry(songKeys(ids)...); n > 0 {
 		a.toast = fmt.Sprintf("重新下载 %d 首", n)
 	}
 	a.pumpDownload()

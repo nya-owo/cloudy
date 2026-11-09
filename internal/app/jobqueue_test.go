@@ -15,11 +15,11 @@ import (
 // What the download and upload queues hold, read the same way before and
 // after the queues share their code.
 
-func dlRunning(a *app) (netease.Track, bool) { return a.downloadQ.current() }
+func dlRunning(a *app) (netease.Track, bool) { return a.dl.queue.current() }
 
 func dlWaiting(a *app) []int64 {
 	var ids []int64
-	for _, tr := range a.downloadQ.waiting {
+	for _, tr := range a.dl.queue.waiting {
 		ids = append(ids, tr.ID)
 	}
 	return ids
@@ -27,7 +27,7 @@ func dlWaiting(a *app) []int64 {
 
 func dlFailed(a *app) map[int64]string {
 	out := map[int64]string{}
-	for _, f := range a.downloadQ.failed {
+	for _, f := range a.dl.queue.failed {
 		out[f.item.ID] = f.reason
 	}
 	return out

@@ -23,7 +23,7 @@ func (a *app) confirmDeleteDownload(tr netease.Track) {
 	path := tr.LocalPath
 	if path == "" {
 		a.loadDownloads(false)
-		for _, it := range a.downloads {
+		for _, it := range a.dl.items {
 			if it.Track.ID == tr.ID {
 				path = it.Path
 				break
@@ -40,7 +40,7 @@ func (a *app) confirmDeleteDownload(tr netease.Track) {
 		a.redraw()
 		return
 	}
-	a.downloadDelete = downloadDelete{open: true, track: tr, path: path}
+	a.dl.deletion = downloadDelete{open: true, track: tr, path: path}
 	a.redraw()
 }
 
@@ -49,12 +49,12 @@ func (a *app) confirmDeleteSelectedDownloads() {
 	if len(items) == 0 {
 		return
 	}
-	a.downloadDelete = downloadDelete{open: true, items: items}
+	a.dl.deletion = downloadDelete{open: true, items: items}
 	a.redraw()
 }
 
 func (a *app) deleteDownload() {
-	d := &a.downloadDelete
+	d := &a.dl.deletion
 	if len(d.items) > 0 {
 		a.deleteDownloadItems(d.items)
 		return
@@ -69,13 +69,13 @@ func (a *app) deleteDownload() {
 		a.redraw()
 		return
 	}
-	keep := a.downloads[:0]
-	for _, it := range a.downloads {
+	keep := a.dl.items[:0]
+	for _, it := range a.dl.items {
 		if it.Track.ID != d.track.ID && downloadPathKey(it.Path) != downloadPathKey(d.path) {
 			keep = append(keep, it)
 		}
 	}
-	a.downloads = keep
+	a.dl.items = keep
 	if err := a.saveDownloads(); err != nil {
 		a.toast = "已删除文件，但下载记录没有保存"
 	} else {
@@ -88,7 +88,7 @@ func (a *app) deleteDownload() {
 // deleteDownloadItems deletes the chosen files, keeping one that is playing
 // and any one the file system refuses. Its index entries go with the files.
 func (a *app) deleteDownloadItems(items []download.Item) {
-	d := &a.downloadDelete
+	d := &a.dl.deletion
 	removed := map[string]bool{}
 	failed := 0
 	playing := a.pl.Current()
@@ -104,13 +104,13 @@ func (a *app) deleteDownloadItems(items []download.Item) {
 		}
 		removed[downloadPathKey(it.Path)] = true
 	}
-	keep := a.downloads[:0]
-	for _, it := range a.downloads {
+	keep := a.dl.items[:0]
+	for _, it := range a.dl.items {
 		if !removed[downloadPathKey(it.Path)] {
 			keep = append(keep, it)
 		}
 	}
-	a.downloads = keep
+	a.dl.items = keep
 	n := len(removed)
 	if err := a.saveDownloads(); err != nil {
 		a.toast = fmt.Sprintf("已删除 %d 首，但下载记录没有保存", n)
@@ -125,7 +125,7 @@ func (a *app) deleteDownloadItems(items []download.Item) {
 }
 
 func (a *app) downloadDeleteDialog(c *ui.Context) {
-	d := &a.downloadDelete
+	d := &a.dl.deletion
 	if !d.open {
 		return
 	}

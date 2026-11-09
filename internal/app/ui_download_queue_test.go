@@ -15,9 +15,9 @@ import (
 func queueTestApp() *app {
 	a := newTestApp()
 	a.settings = defaultSettings()
-	a.downloadQ.running = &netease.Track{ID: 1, Name: "正在下载", Artists: []netease.Artist{{Name: "歌手甲"}}, Duration: 200000}
-	a.downloadQ.done, a.downloadQ.size = 50, 100
-	a.downloadQ.waiting = []netease.Track{
+	a.dl.queue.running = &netease.Track{ID: 1, Name: "正在下载", Artists: []netease.Artist{{Name: "歌手甲"}}, Duration: 200000}
+	a.dl.queue.done, a.dl.queue.size = 50, 100
+	a.dl.queue.waiting = []netease.Track{
 		{ID: 2, Name: "等待一", Artists: []netease.Artist{{Name: "歌手乙"}}, Duration: 210000},
 		{ID: 3, Name: "等待二", Artists: []netease.Artist{{Name: "歌手丙"}}, Duration: 220000},
 	}
@@ -38,15 +38,15 @@ func TestDownloadQueueWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if chosen := a.queueView.chosen(a.downloadQueueEntries()); chosen != 3 {
+	if chosen := a.dl.view.chosen(a.downloadQueueEntries()); chosen != 3 {
 		t.Fatalf("chosen %d", chosen)
 	}
 	if err := tt.Click("取消所选下载"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.downloadQ.running != nil || len(a.downloadQ.waiting) != 0 {
-		t.Fatalf("job %+v, queue %+v", a.downloadQ.running, a.downloadQ.waiting)
+	if a.dl.queue.running != nil || len(a.dl.queue.waiting) != 0 {
+		t.Fatalf("job %+v, queue %+v", a.dl.queue.running, a.dl.queue.waiting)
 	}
 	if !tt.HasText("下载队列是空的") {
 		t.Fatalf("empty queue texts %q", tt.Texts())
@@ -55,7 +55,7 @@ func TestDownloadQueueWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.queueView.open {
+	if a.dl.view.open {
 		t.Fatal("queue window stayed open")
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"netease-music-mygo/internal/download"
 	"netease-music-mygo/internal/netease"
 	"netease-music-mygo/internal/player"
 )
@@ -239,17 +238,7 @@ type app struct {
 
 	// The songs saved to disk, the ones on their way there, and where both
 	// are kept.
-	downloads         []download.Item
-	downloadsLoaded   bool
-	downloadsErr      string
-	downloadQ         jobQueue[netease.Track, songKey]
-	downloadsFixed    bool   // the downloads without tags were looked at
-	downloadArtDir    string // where covers found in the folder are kept
-	downloadIndex     string // where the index of downloaded songs is kept
-	downloadBox       ui.Handle
-	downloadPathDraft string // the folder path being typed in the settings
-	queueView         queueWindow
-	downloadDelete    downloadDelete
+	dl downloadState
 
 	restored     bool   // playback picked up where it was left
 	savedSession string // the session as last kept

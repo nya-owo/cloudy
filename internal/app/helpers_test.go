@@ -23,7 +23,7 @@ func newTestApp() *app {
 	a.pl = player.New(func(func()) {})
 	a.pl.SetVolume(0.5)
 	tagDownload = func(download.Item) bool { return true }
-	a.downloadsFixed = true
+	a.dl.fixed = true
 	// The songs played on this computer are none, not the developer's.
 	a.recent.loaded = true
 	// The system is not asked, as no app runs: starting at login is off,

@@ -63,7 +63,7 @@ func (a *app) downloadAll(tracks []netease.Track) {
 			skipped++
 			continue
 		}
-		a.downloadQ.add(tr)
+		a.dl.queue.add(tr)
 		queued++
 	}
 	switch {
@@ -82,7 +82,7 @@ func (a *app) downloadAll(tracks []netease.Track) {
 // downloadPending reports whether the song is being saved or waits in the
 // download queue.
 func (a *app) downloadPending(id int64) bool {
-	return a.downloadQ.pending(songKey{}.key(netease.Track{ID: id}))
+	return a.dl.queue.pending(songKey{}.key(netease.Track{ID: id}))
 }
 
 // likeAll likes every song of tracks not liked yet. The hearts fill at
@@ -297,7 +297,7 @@ func (a *app) batchAll(pl *netease.Playlist) bool {
 
 func (a *app) downloadBatchCount() int {
 	n := 0
-	for _, it := range a.downloads {
+	for _, it := range a.dl.items {
 		if a.batch.selected[it.Track.ID] {
 			n++
 		}
@@ -306,15 +306,15 @@ func (a *app) downloadBatchCount() int {
 }
 
 func (a *app) downloadBatchAll() bool {
-	return len(a.downloads) > 0 && a.downloadBatchCount() == len(a.downloads)
+	return len(a.dl.items) > 0 && a.downloadBatchCount() == len(a.dl.items)
 }
 
 func (a *app) downloadBatchSelectAll() {
 	if a.downloadBatchAll() {
 		a.batch.selected = map[int64]bool{}
 	} else {
-		a.batch.selected = make(map[int64]bool, len(a.downloads))
-		for _, it := range a.downloads {
+		a.batch.selected = make(map[int64]bool, len(a.dl.items))
+		for _, it := range a.dl.items {
 			a.batch.selected[it.Track.ID] = true
 		}
 	}
@@ -323,7 +323,7 @@ func (a *app) downloadBatchSelectAll() {
 
 func (a *app) downloadBatchItems() []download.Item {
 	var out []download.Item
-	for _, it := range a.downloads {
+	for _, it := range a.dl.items {
 		if a.batch.selected[it.Track.ID] {
 			out = append(out, it)
 		}

@@ -130,15 +130,15 @@ func dropChosen[T any, K jobKey[T]](q *jobQueue[T, K], w *queueWindow, stop func
 
 // The download queue.
 
-func (a *app) downloadQueueCount() int { return a.downloadQ.count() }
+func (a *app) downloadQueueCount() int { return a.dl.queue.count() }
 
 func (a *app) openDownloadQueue() {
-	a.queueView.reset()
+	a.dl.view.reset()
 	a.redraw()
 }
 
 func (a *app) downloadQueueEntries() []queueEntry {
-	return queueEntries(&a.downloadQ, func(tr netease.Track) queueEntry {
+	return queueEntries(&a.dl.queue, func(tr netease.Track) queueEntry {
 		return queueEntry{title: tr.Name, sub: tr.ArtistNames(), cover: tr.Album.PicURL}
 	})
 }
@@ -147,10 +147,10 @@ func (a *app) downloadQueueEntries() []queueEntry {
 // the one downloading if it was chosen, and forgets the chosen ones that
 // failed.
 func (a *app) cancelSelectedDownloads() {
-	if len(a.queueView.selected) == 0 {
+	if len(a.dl.view.selected) == 0 {
 		return
 	}
-	if n := dropChosen(&a.downloadQ, &a.queueView, a.cancelDownload); n > 0 {
+	if n := dropChosen(&a.dl.queue, &a.dl.view, a.cancelDownload); n > 0 {
 		a.toast = fmt.Sprintf("已取消 %d 项下载", n)
 	}
 	a.saveDownloadQueue()
@@ -158,8 +158,8 @@ func (a *app) cancelSelectedDownloads() {
 }
 
 func (a *app) clearDownloadQueue() {
-	a.queueView.selected = map[string]bool{}
-	if a.downloadQ.clear() {
+	a.dl.view.selected = map[string]bool{}
+	if a.dl.queue.clear() {
 		a.cancelDownload()
 	}
 	a.toast = "已清空下载队列"
@@ -171,8 +171,8 @@ func (a *app) clearDownloadQueue() {
 // the one downloading, or forgets it once it failed.
 func (a *app) removeDownload(id int64) {
 	key := strconv.FormatInt(id, 10)
-	delete(a.queueView.selected, key)
-	tr, how := a.downloadQ.remove(key)
+	delete(a.dl.view.selected, key)
+	tr, how := a.dl.queue.remove(key)
 	switch how {
 	case wasRunning:
 		a.cancelDownload()
@@ -191,7 +191,7 @@ func songID(key string) int64 {
 
 // downloadQueueDialog is the queue's own window.
 func (a *app) downloadQueueDialog(c *ui.Context) {
-	a.queueDialog(c, &a.queueView, a.downloadQueueEntries(), len(a.downloadQ.waiting), len(a.downloadQ.failed), queueSpec{
+	a.queueDialog(c, &a.dl.view, a.downloadQueueEntries(), len(a.dl.queue.waiting), len(a.dl.queue.failed), queueSpec{
 		id: "download-queue", keys: "dq", title: "下载队列", verb: "下载", noun: "队列",
 		icon: iconDownload, cancelChosen: "取消所选下载",
 		retry:    func(key string) { a.retryDownloads(songID(key)) },

@@ -59,7 +59,7 @@ var dangerColor = ui.Hex("#e5484d")
 // the app to show through: a window of its own would have nothing under it.
 func (a *app) openSettings() {
 	a.measureCache()
-	a.downloadPathDraft = a.downloadFolder()
+	a.dl.pathDraft = a.downloadFolder()
 	a.settingsQuery = ""
 	a.settingsOpen = true
 	a.showMain()

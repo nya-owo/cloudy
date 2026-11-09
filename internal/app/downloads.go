@@ -67,12 +67,12 @@ func (a *app) downloadFolder() string {
 
 // downloadStore is where the index of downloaded songs is kept.
 func (a *app) downloadStore() download.Store {
-	if a.downloadIndex == "" {
+	if a.dl.index == "" {
 		if dir, err := mygo.App.Path(mygo.PathUserData); err == nil {
-			a.downloadIndex = filepath.Join(dir, "downloads.json")
+			a.dl.index = filepath.Join(dir, "downloads.json")
 		}
 	}
-	return download.Store{Path: a.downloadIndex}
+	return download.Store{Path: a.dl.index}
 }
 
 // ensureDownloadFolder makes the folder downloaded songs are kept in, and
@@ -98,15 +98,15 @@ func (a *app) setDownloadFolder(dir string) {
 		dir = filepath.Clean(dir)
 		if folderRoot(dir) {
 			a.toast = "不能把整块磁盘当作下载文件夹"
-			a.downloadPathDraft = a.downloadFolder()
+			a.dl.pathDraft = a.downloadFolder()
 			a.redraw()
 			return
 		}
 	}
 	a.settings.DownloadFolder = dir
 	a.settings.save()
-	a.downloadPathDraft = a.downloadFolder()
-	a.downloadsLoaded, a.downloads, a.downloadsErr = false, nil, ""
+	a.dl.pathDraft = a.downloadFolder()
+	a.dl.loaded, a.dl.items, a.dl.err = false, nil, ""
 	a.loadDownloads(true)
 	a.redraw()
 }
@@ -115,20 +115,20 @@ func (a *app) setDownloadFolder(dir string) {
 // for files put there by hand. A missing or broken index is rebuilt from the
 // folder rather than taking the songs away.
 func (a *app) loadDownloads(scan bool) {
-	if a.downloadsLoaded && !scan {
+	if a.dl.loaded && !scan {
 		return
 	}
 	dir, err := a.ensureDownloadFolder()
 	if err != nil {
-		a.downloadsLoaded, a.downloadsErr = true, "无法打开下载文件夹"
+		a.dl.loaded, a.dl.err = true, "无法打开下载文件夹"
 		return
 	}
-	if a.downloadArtDir == "" {
+	if a.dl.artDir == "" {
 		if cache, e := mygo.App.Path(mygo.PathCache); e == nil {
-			a.downloadArtDir = filepath.Join(cache, "download-covers")
+			a.dl.artDir = filepath.Join(cache, "download-covers")
 		}
 	}
-	a.downloadsErr = ""
+	a.dl.err = ""
 	store := a.downloadStore()
 	_, statErr := os.Stat(store.Path)
 	missing := os.IsNotExist(statErr)
@@ -140,18 +140,18 @@ func (a *app) loadDownloads(scan bool) {
 	if scan || broken || missing {
 		items, err = a.scanDownloadFolder(dir, items)
 		if err != nil {
-			a.downloadsErr = "无法读取下载文件夹"
+			a.dl.err = "无法读取下载文件夹"
 		}
 	} else {
 		items = existingDownloads(items)
 	}
 	sortDownloads(items)
-	a.downloads = items
-	a.downloadsLoaded = true
+	a.dl.items = items
+	a.dl.loaded = true
 	a.fixDownloads()
 	if scan || broken || missing {
 		if err := a.saveDownloads(); err != nil {
-			a.downloadsErr = "无法保存下载记录"
+			a.dl.err = "无法保存下载记录"
 		}
 	}
 }
@@ -270,14 +270,14 @@ func pathWithin(dir, path string) bool {
 
 // saveDownloads keeps the index, and says whether it could.
 func (a *app) saveDownloads() error {
-	return a.downloadStore().Save(a.downloads)
+	return a.downloadStore().Save(a.dl.items)
 }
 
 // downloadTracks are the downloaded songs as the player queues them: each
 // one plays from its file, whatever NetEase would say of the song now.
 func (a *app) downloadTracks() []netease.Track {
-	tracks := make([]netease.Track, 0, len(a.downloads))
-	for _, it := range a.downloads {
+	tracks := make([]netease.Track, 0, len(a.dl.items))
+	for _, it := range a.dl.items {
 		tr := it.Track
 		tr.LocalPath, tr.Privilege, tr.Fee, tr.ProgramID, tr.Reason = it.Path, nil, 0, 0, ""
 		tracks = append(tracks, tr)
@@ -288,7 +288,7 @@ func (a *app) downloadTracks() []netease.Track {
 // downloadBytes is how much the downloaded songs take.
 func (a *app) downloadBytes() int64 {
 	var total int64
-	for _, it := range a.downloads {
+	for _, it := range a.dl.items {
 		if it.Size > 0 {
 			total += it.Size
 			continue
@@ -302,7 +302,7 @@ func (a *app) downloadBytes() int64 {
 
 // downloaded reports whether the song is already saved.
 func (a *app) downloaded(id int64) bool {
-	for _, it := range a.downloads {
+	for _, it := range a.dl.items {
 		if it.Track.ID == id {
 			if _, err := os.Stat(it.Path); err == nil {
 				return true
@@ -328,7 +328,7 @@ func (a *app) startDownload(tr netease.Track) {
 		a.redraw()
 		return
 	}
-	q := &a.downloadQ
+	q := &a.dl.queue
 	if cur, ok := q.current(); ok && cur.ID == tr.ID {
 		a.toast = "这首歌正在下载"
 		a.redraw()
@@ -347,7 +347,7 @@ func (a *app) startDownload(tr netease.Track) {
 
 // pumpDownload starts the next song queued, unless one is downloading.
 func (a *app) pumpDownload() {
-	q := &a.downloadQ
+	q := &a.dl.queue
 	tr, ok := q.next()
 	if !ok {
 		return
@@ -371,12 +371,12 @@ func (a *app) pumpDownload() {
 // finishDownload lists what arrived, or says why it did not, and starts the
 // next one queued.
 func (a *app) finishDownload(item download.Item, err error) {
-	tr := a.downloadQ.finish()
+	tr := a.dl.queue.finish()
 	switch {
 	case err == nil:
-		a.downloads = append([]download.Item{item}, a.downloads...)
-		sortDownloads(a.downloads)
-		a.downloadsLoaded = true
+		a.dl.items = append([]download.Item{item}, a.dl.items...)
+		sortDownloads(a.dl.items)
+		a.dl.loaded = true
 		if saveErr := a.saveDownloads(); saveErr != nil {
 			a.toast = "已下载：" + item.Track.Name + "，但下载记录没有保存"
 		} else {
@@ -386,10 +386,10 @@ func (a *app) finishDownload(item download.Item, err error) {
 		a.toast = "已取消下载"
 	case errors.Is(err, netease.ErrUnavailable):
 		a.toast = "这首歌暂时不能下载"
-		a.downloadQ.fail(tr, "没有下载权限")
+		a.dl.queue.fail(tr, "没有下载权限")
 	default:
 		a.toast = "下载失败：" + err.Error()
-		a.downloadQ.fail(tr, err.Error())
+		a.dl.queue.fail(tr, err.Error())
 	}
 	a.pumpDownload()
 	a.saveDownloadQueue()
@@ -398,7 +398,7 @@ func (a *app) finishDownload(item download.Item, err error) {
 
 // cancelDownload stops the song being saved and goes on with the queue.
 func (a *app) cancelDownload() {
-	if !a.downloadQ.stop() {
+	if !a.dl.queue.stop() {
 		return
 	}
 	a.toast = "已取消下载"
@@ -483,7 +483,7 @@ func (a *app) downloadCover(s local.Song) string {
 	if len(s.Picture) == 0 {
 		return ""
 	}
-	dir := a.downloadArtDir
+	dir := a.dl.artDir
 	if dir == "" {
 		cache, err := mygo.App.Path(mygo.PathCache)
 		if err != nil {

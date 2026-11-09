@@ -9,15 +9,15 @@ import (
 
 // downloadsPage lists the songs saved to disk, and what is on its way.
 func (a *app) downloadsPage(c *ui.Context) {
-	if !a.downloadsLoaded {
+	if !a.dl.loaded {
 		a.loadDownloads(false)
 	}
 	tracks := a.downloadTracks()
-	if a.downloadsErr != "" && len(tracks) == 0 && a.downloadQ.running == nil {
-		a.centered(c, a.downloadsErr, func() { a.loadDownloads(true) })
+	if a.dl.err != "" && len(tracks) == 0 && a.dl.queue.running == nil {
+		a.centered(c, a.dl.err, func() { a.loadDownloads(true) })
 		return
 	}
-	if len(tracks) == 0 && a.downloadQ.running == nil && len(a.downloadQ.waiting) == 0 {
+	if len(tracks) == 0 && a.dl.queue.running == nil && len(a.dl.queue.waiting) == 0 {
 		a.downloadsEmpty(c)
 		return
 	}
@@ -27,10 +27,10 @@ func (a *app) downloadsPage(c *ui.Context) {
 // downloadArtURL is the cover of the newest song saved, or of the one
 // arriving while there is no other.
 func (a *app) downloadArtURL() string {
-	if len(a.downloads) > 0 {
-		return a.downloads[0].Track.Album.PicURL
+	if len(a.dl.items) > 0 {
+		return a.dl.items[0].Track.Album.PicURL
 	}
-	if tr, ok := a.downloadQ.current(); ok {
+	if tr, ok := a.dl.queue.current(); ok {
 		return tr.Album.PicURL
 	}
 	return ""
@@ -40,7 +40,7 @@ func (a *app) downloadArtURL() string {
 func (a *app) downloadCovers() []string {
 	urls := make([]string, 0, 3)
 	seen := map[string]bool{}
-	for _, it := range a.downloads {
+	for _, it := range a.dl.items {
 		url := it.Track.Album.PicURL
 		if url != "" && !seen[url] {
 			seen[url] = true
@@ -63,8 +63,8 @@ func (a *app) downloadsHeader(c *ui.Context) {
 		total += tracks[i].Length()
 	}
 	meta := "保存在本机"
-	if len(a.downloads) > 0 {
-		meta = fmt.Sprintf("保存在本机 · %d 首 · %s · %s", len(a.downloads), longTime(total), sizeText(a.downloadBytes()))
+	if len(a.dl.items) > 0 {
+		meta = fmt.Sprintf("保存在本机 · %d 首 · %s · %s", len(a.dl.items), longTime(total), sizeText(a.downloadBytes()))
 	}
 	head := ui.Row(c).Gap(28).AlignItems(ui.End).Padding(0, 0, 26, 0)
 	head.Children(func() {
@@ -78,7 +78,7 @@ func (a *app) downloadsHeader(c *ui.Context) {
 				ui.Text(c, "选择歌曲，完成后在下方删除").FontSize(12.5).TextColor(p.muted).Margin(10, 0, 0, 0)
 			} else {
 				ui.Row(c).Wrap().GapX(10).GapY(8).Margin(10, 0, 0, 0).Children(func() {
-					if len(a.downloads) > 0 {
+					if len(a.dl.items) > 0 {
 						if pillButton(c.Key("play"), iconPlay, "播放", p.accent, p.onAccent).Clicked() {
 							a.playList(a.downloadTracks(), false)
 						}
@@ -89,7 +89,7 @@ func (a *app) downloadsHeader(c *ui.Context) {
 					if pillButton(c.Key("open"), iconFolder, "打开文件夹", p.hover.Over(p.bg), p.text).Clicked() {
 						a.openDownloadFolder()
 					}
-					count := a.downloadQueueCount() + len(a.downloadQ.failed)
+					count := a.downloadQueueCount() + len(a.dl.queue.failed)
 					queueLabel := "下载队列"
 					if count > 0 {
 						queueLabel = fmt.Sprintf("下载队列 %d", count)
@@ -102,7 +102,7 @@ func (a *app) downloadsHeader(c *ui.Context) {
 					more := iconButton(c.Key("more"), iconMore, 18, p.muted, "更多").Size(36, 36)
 					if more.Clicked() {
 						var groups [][]menuAction
-						if len(a.downloads) > 0 {
+						if len(a.dl.items) > 0 {
 							groups = append(groups, []menuAction{{label: "批量删除", icon: iconTrash, do: a.startDownloadBatch}})
 						}
 						groups = append(groups, []menuAction{
@@ -126,7 +126,7 @@ func (a *app) downloadsHeader(c *ui.Context) {
 // waits behind it.
 func (a *app) downloadProgress(c *ui.Context) {
 	p := a.pal
-	q := &a.downloadQ
+	q := &a.dl.queue
 	tr, ok := q.current()
 	if !ok {
 		return
@@ -155,8 +155,8 @@ func (a *app) downloadProgress(c *ui.Context) {
 			} else {
 				ui.Text(c, sizeText(q.done)).FontSize(10.5).FontFeatures("tnum").TextColor(p.muted)
 			}
-			if len(a.downloadQ.waiting) > 0 {
-				ui.Text(c, fmt.Sprintf("还有 %d 首", len(a.downloadQ.waiting))).FontSize(10.5).TextColor(p.faint)
+			if len(a.dl.queue.waiting) > 0 {
+				ui.Text(c, fmt.Sprintf("还有 %d 首", len(a.dl.queue.waiting))).FontSize(10.5).TextColor(p.faint)
 			}
 		})
 	})

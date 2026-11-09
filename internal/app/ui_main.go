@@ -46,7 +46,7 @@ func (a *app) view(c *ui.Context) {
 		c.Root().Background(ui.Transparent)
 	}
 	root := ui.Box(c).Fill()
-	if !c.Focused(a.searchBox) && !c.Focused(a.filterBox) && !c.Focused(a.downloadBox) && !c.Focused(a.mineView.box) && !c.Focused(a.settingsSearchBox) {
+	if !c.Focused(a.searchBox) && !c.Focused(a.filterBox) && !c.Focused(a.dl.box) && !c.Focused(a.mineView.box) && !c.Focused(a.settingsSearchBox) {
 		// Space plays and pauses wherever the focus is, as in Music. On
 		// the container around everything, it comes before a button the
 		// pointer focused, which would take Space as a click; on the
