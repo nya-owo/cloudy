@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"runtime"
 	"time"
 
@@ -141,18 +140,13 @@ type app struct {
 	recent       recentState     // the songs played on this computer
 	cloud        cloudState      // the listener's music cloud drive
 	// The songs going up to the cloud drive, as downloads come down.
-	uploadQueue     []cloudUpload
-	uploadJob       *uploadJob
-	uploadCancel    context.CancelFunc
-	uploadGen       int
-	uploadFailed    []cloudUpload
-	uploadsRestored bool
-	uploadUser      int64 // the account the queue goes up for, 0 for none
-	uploadedSome    bool  // a song went up since the drive was last read
-	uploadView      uploadQueueView
-	outputList      outputList // the audio outputs, as last listed
-	comments        commentState
-	tabCount        rollState // the count on the comments' tab, as it rolls
+	uploadQ      jobQueue[cloudUpload, fileKey]
+	uploadUser   int64 // the account the queue goes up for, 0 for none
+	uploadedSome bool  // a song went up since the drive was last read
+	uploadView   queueWindow
+	outputList   outputList // the audio outputs, as last listed
+	comments     commentState
+	tabCount     rollState // the count on the comments' tab, as it rolls
 
 	fmMode        int // the FM mode chosen, in fmModes
 	fmCoversState fmCoverStack
@@ -248,18 +242,13 @@ type app struct {
 	downloads         []download.Item
 	downloadsLoaded   bool
 	downloadsErr      string
-	downloadQueue     []netease.Track
-	downloadJob       *downloadJob
-	downloadCancel    context.CancelFunc
-	downloadGen       int
-	downloadFailed    []failedDownload // songs that failed to download, to try again
-	downloadsRestored bool             // the queue left at the last quit is picked up
-	downloadsFixed    bool             // the downloads without tags were looked at
-	downloadArtDir    string           // where covers found in the folder are kept
-	downloadIndex     string           // where the index of downloaded songs is kept
+	downloadQ         jobQueue[netease.Track, songKey]
+	downloadsFixed    bool   // the downloads without tags were looked at
+	downloadArtDir    string // where covers found in the folder are kept
+	downloadIndex     string // where the index of downloaded songs is kept
 	downloadBox       ui.Handle
 	downloadPathDraft string // the folder path being typed in the settings
-	queueView         downloadQueueView
+	queueView         queueWindow
 	downloadDelete    downloadDelete
 
 	restored     bool   // playback picked up where it was left

@@ -61,11 +61,9 @@ func TestDownloadFrames(t *testing.T) {
 				{Track: netease.Track{ID: 2, Name: "夜曲", Artists: []netease.Artist{{Name: "测试歌手"}}, Album: netease.Album{Name: "十一月的萧邦"}, Duration: 226000}, Path: filepath.Join("C:", "Music", "夜曲.flac"), Size: 24_600_000, At: time.Now().Add(-time.Hour)},
 				{Track: netease.Track{ID: 3, Name: "江南", Artists: []netease.Artist{{Name: "另一个歌手"}}, Duration: 258000}, Path: filepath.Join("C:", "Music", "江南.mp3"), Size: 7_900_000, At: time.Now().Add(-2 * time.Hour)},
 			}
-			a.downloadJob = &downloadJob{
-				track: netease.Track{ID: 4, Name: "起风了", Artists: []netease.Artist{{Name: "第三位歌手"}}, Album: netease.Album{PicURL: coverPath}},
-				got:   3_100_000, total: 8_900_000,
-			}
-			a.downloadQueue = []netease.Track{{ID: 5, Name: "演员"}, {ID: 6, Name: "好久不见"}}
+			a.downloadQ.running = &netease.Track{ID: 4, Name: "起风了", Artists: []netease.Artist{{Name: "第三位歌手"}}, Album: netease.Album{PicURL: coverPath}}
+			a.downloadQ.done, a.downloadQ.size = 3_100_000, 8_900_000
+			a.downloadQ.waiting = []netease.Track{{ID: 5, Name: "演员"}, {ID: 6, Name: "好久不见"}}
 			a.open(route{page: pageDownloads})
 			tt := ui.NewTester(a.view, width, 780)
 			tt.SetDark(dark)

@@ -40,46 +40,46 @@ func TestUploadQueue(t *testing.T) {
 		{Path: `C:\Music\b.flac`, Title: "乙", Size: 2 << 20},
 	}
 	a.queueUploads(songs, 0)
-	if a.uploadJob == nil || a.uploadJob.item.Title != "甲" || len(a.uploadQueue) != 1 {
-		t.Fatalf("job %+v queue %+v", a.uploadJob, a.uploadQueue)
+	if a.uploadQ.running == nil || a.uploadQ.running.Title != "甲" || len(a.uploadQ.waiting) != 1 {
+		t.Fatalf("job %+v queue %+v", a.uploadQ.running, a.uploadQ.waiting)
 	}
 	a.queueUploads([]cloudUpload{{Path: `c:\music\B.FLAC`}}, 0)
-	if len(a.uploadQueue) != 1 || a.toast != "这些歌曲已经在上传列表里" {
-		t.Fatalf("queued twice: %+v, toast %q", a.uploadQueue, a.toast)
+	if len(a.uploadQ.waiting) != 1 || a.toast != "这些歌曲已经在上传列表里" {
+		t.Fatalf("queued twice: %+v, toast %q", a.uploadQ.waiting, a.toast)
 	}
 
 	// The one going up fails: it is kept to try again, and the next starts.
 	a.finishUpload(errors.New("netease: 上传文件失败"))
-	if len(a.uploadFailed) != 1 || a.uploadFailed[0].Reason != "上传文件失败" {
-		t.Fatalf("failed %+v", a.uploadFailed)
+	if len(a.uploadQ.failed) != 1 || a.uploadQ.failed[0].reason != "上传文件失败" {
+		t.Fatalf("failed %+v", a.uploadQ.failed)
 	}
-	if a.uploadJob == nil || a.uploadJob.item.Title != "乙" {
-		t.Fatalf("next not started: %+v", a.uploadJob)
+	if a.uploadQ.running == nil || a.uploadQ.running.Title != "乙" {
+		t.Fatalf("next not started: %+v", a.uploadQ.running)
 	}
 
 	// Kept across launches: what went up as the app quit, and what failed.
 	b := uploadTestApp(t)
 	b.settings.path = a.settings.path
 	b.restoreUploadQueue()
-	if b.uploadJob == nil || b.uploadJob.item.Title != "乙" || len(b.uploadFailed) != 1 {
-		t.Fatalf("restored job %+v failed %+v", b.uploadJob, b.uploadFailed)
+	if b.uploadQ.running == nil || b.uploadQ.running.Title != "乙" || len(b.uploadQ.failed) != 1 {
+		t.Fatalf("restored job %+v failed %+v", b.uploadQ.running, b.uploadQ.failed)
 	}
 	b.cancelUpload()
 
 	// Tried again, the failed one waits behind the one going up.
 	a.retryUploads()
-	if len(a.uploadFailed) != 0 || len(a.uploadQueue) != 1 || a.uploadQueue[0].Title != "甲" {
-		t.Fatalf("retry: failed %+v queue %+v", a.uploadFailed, a.uploadQueue)
+	if len(a.uploadQ.failed) != 0 || len(a.uploadQ.waiting) != 1 || a.uploadQ.waiting[0].Title != "甲" {
+		t.Fatalf("retry: failed %+v queue %+v", a.uploadQ.failed, a.uploadQ.waiting)
 	}
 
 	// Done, the drive is read again.
 	a.finishUpload(nil)
-	if a.toast != "已上传到云盘：乙" || a.uploadJob == nil {
-		t.Fatalf("toast %q job %+v", a.toast, a.uploadJob)
+	if a.toast != "已上传到云盘：乙" || a.uploadQ.running == nil {
+		t.Fatalf("toast %q job %+v", a.toast, a.uploadQ.running)
 	}
 	a.cancelUpload()
-	if a.uploadJob != nil || !a.cloud.loading {
-		t.Fatalf("the drive was not read again: job %+v cloud %+v", a.uploadJob, a.cloud)
+	if a.uploadQ.running != nil || !a.cloud.loading {
+		t.Fatalf("the drive was not read again: job %+v cloud %+v", a.uploadQ.running, a.cloud)
 	}
 }
 
@@ -112,7 +112,7 @@ func TestUploadList(t *testing.T) {
 		{Path: `C:\Music\a.mp3`, Title: "甲", Size: 1 << 20},
 		{Path: `C:\Music\b.mp3`, Title: "乙", Size: 1 << 20},
 	}, 0)
-	a.uploadJob.sent, a.uploadJob.all = 1<<19, 1<<20
+	a.uploadQ.done, a.uploadQ.size = 1<<19, 1<<20
 	tt.Frame()
 	if err := tt.Click("上传列表 2 · 50%"); err != nil {
 		t.Fatalf("%v: %v", err, tt.Texts())
@@ -131,8 +131,8 @@ func TestUploadList(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.uploadJob != nil || len(a.uploadQueue) != 0 || !tt.HasText("上传列表是空的") {
-		t.Fatalf("job %+v queue %+v: %v", a.uploadJob, a.uploadQueue, tt.Texts())
+	if a.uploadQ.running != nil || len(a.uploadQ.waiting) != 0 || !tt.HasText("上传列表是空的") {
+		t.Fatalf("job %+v queue %+v: %v", a.uploadQ.running, a.uploadQ.waiting, tt.Texts())
 	}
 }
 
@@ -146,21 +146,21 @@ func TestUploadsStayWithTheirAccount(t *testing.T) {
 		{Path: `C:\Music\b.flac`, Title: "乙", Size: 2 << 20},
 	}, 0)
 	a.uploadsFor(nil)
-	if a.uploadJob != nil || len(a.uploadQueue) != 0 || a.uploadUser != 0 {
-		t.Fatalf("still uploading after signing out: job %+v queue %+v", a.uploadJob, a.uploadQueue)
+	if a.uploadQ.running != nil || len(a.uploadQ.waiting) != 0 || a.uploadUser != 0 {
+		t.Fatalf("still uploading after signing out: job %+v queue %+v", a.uploadQ.running, a.uploadQ.waiting)
 	}
 	if a.toast != "账号已切换，已停止上传" {
 		t.Fatalf("toast %q", a.toast)
 	}
 
 	a.uploadsFor(&netease.Profile{UserID: 2})
-	if a.uploadJob != nil || len(a.uploadQueue) != 0 {
-		t.Fatalf("another account took the queue: job %+v queue %+v", a.uploadJob, a.uploadQueue)
+	if a.uploadQ.running != nil || len(a.uploadQ.waiting) != 0 {
+		t.Fatalf("another account took the queue: job %+v queue %+v", a.uploadQ.running, a.uploadQ.waiting)
 	}
 
 	a.uploadsFor(&netease.Profile{UserID: 1})
-	if a.uploadJob == nil || a.uploadJob.item.Title != "甲" || len(a.uploadQueue) != 1 {
-		t.Fatalf("not restored for its account: job %+v queue %+v", a.uploadJob, a.uploadQueue)
+	if a.uploadQ.running == nil || a.uploadQ.running.Title != "甲" || len(a.uploadQ.waiting) != 1 {
+		t.Fatalf("not restored for its account: job %+v queue %+v", a.uploadQ.running, a.uploadQ.waiting)
 	}
 }
 
@@ -174,12 +174,12 @@ func TestUploadsOldQueueFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.uploadsFor(nil)
-	if a.uploadJob != nil {
+	if a.uploadQ.running != nil {
 		t.Fatal("restored with nobody signed in")
 	}
 	a.uploadsFor(&netease.Profile{UserID: 5})
-	if a.uploadJob == nil || a.uploadJob.item.Title != "甲" {
-		t.Fatalf("not restored: %+v", a.uploadJob)
+	if a.uploadQ.running == nil || a.uploadQ.running.Title != "甲" {
+		t.Fatalf("not restored: %+v", a.uploadQ.running)
 	}
 	if _, err := os.Stat(old); !os.IsNotExist(err) {
 		t.Fatal("the old file is still there, for the next account to take")

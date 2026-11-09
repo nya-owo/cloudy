@@ -52,7 +52,7 @@ func TestDownloadWithoutPermission(t *testing.T) {
 		Name:      "会员歌曲",
 		Privilege: &netease.Privilege{St: 0, Pl: 0},
 	})
-	if a.downloadJob != nil || len(a.downloadQueue) != 0 {
+	if a.downloadQ.running != nil || len(a.downloadQ.waiting) != 0 {
 		t.Fatal("queued a song without permission")
 	}
 	if a.toast != "这首歌暂时没有下载权限" {
@@ -83,8 +83,8 @@ func TestDownloadFromSongMenu(t *testing.T) {
 	if err := chooseItem(tt, "下载到本机"); err != nil {
 		t.Fatal(err)
 	}
-	if a.downloadJob == nil || a.downloadJob.track.ID != 2 {
-		t.Fatalf("job %+v, toast %q, queue %+v, downloads %+v", a.downloadJob, a.toast, a.downloadQueue, a.downloads)
+	if a.downloadQ.running == nil || a.downloadQ.running.ID != 2 {
+		t.Fatalf("job %+v, toast %q, queue %+v, downloads %+v", a.downloadQ.running, a.toast, a.downloadQ.waiting, a.downloads)
 	}
 	a.startDownload(netease.Track{ID: 2, Name: "宝船"})
 	if a.toast != "这首歌正在下载" {

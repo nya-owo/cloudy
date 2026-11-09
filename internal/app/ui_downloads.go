@@ -13,11 +13,11 @@ func (a *app) downloadsPage(c *ui.Context) {
 		a.loadDownloads(false)
 	}
 	tracks := a.downloadTracks()
-	if a.downloadsErr != "" && len(tracks) == 0 && a.downloadJob == nil {
+	if a.downloadsErr != "" && len(tracks) == 0 && a.downloadQ.running == nil {
 		a.centered(c, a.downloadsErr, func() { a.loadDownloads(true) })
 		return
 	}
-	if len(tracks) == 0 && a.downloadJob == nil && len(a.downloadQueue) == 0 {
+	if len(tracks) == 0 && a.downloadQ.running == nil && len(a.downloadQ.waiting) == 0 {
 		a.downloadsEmpty(c)
 		return
 	}
@@ -30,8 +30,8 @@ func (a *app) downloadArtURL() string {
 	if len(a.downloads) > 0 {
 		return a.downloads[0].Track.Album.PicURL
 	}
-	if a.downloadJob != nil {
-		return a.downloadJob.track.Album.PicURL
+	if tr, ok := a.downloadQ.current(); ok {
+		return tr.Album.PicURL
 	}
 	return ""
 }
@@ -89,7 +89,7 @@ func (a *app) downloadsHeader(c *ui.Context) {
 					if pillButton(c.Key("open"), iconFolder, "打开文件夹", p.hover.Over(p.bg), p.text).Clicked() {
 						a.openDownloadFolder()
 					}
-					count := a.downloadQueueCount() + len(a.downloadFailed)
+					count := a.downloadQueueCount() + len(a.downloadQ.failed)
 					queueLabel := "下载队列"
 					if count > 0 {
 						queueLabel = fmt.Sprintf("下载队列 %d", count)
@@ -126,18 +126,19 @@ func (a *app) downloadsHeader(c *ui.Context) {
 // waits behind it.
 func (a *app) downloadProgress(c *ui.Context) {
 	p := a.pal
-	job := a.downloadJob
-	if job == nil {
+	q := &a.downloadQ
+	tr, ok := q.current()
+	if !ok {
 		return
 	}
 	share := float32(0)
-	if job.total > 0 {
-		share = min(float32(job.got)/float32(job.total), 1)
+	if q.size > 0 {
+		share = min(float32(q.done)/float32(q.size), 1)
 	}
 	ui.Column(c).Gap(5).Margin(6, 0, 0, 0).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, iconDownload).Size(13, 13).TextColor(p.accent)
-			ui.Text(c, "正在下载 · "+job.track.Name).FontSize(12).FontWeight(600).TextColor(p.text).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+			ui.Text(c, "正在下载 · "+tr.Name).FontSize(12).FontWeight(600).TextColor(p.text).SingleLine().Grow(1).Shrink(1).MinWidth(0)
 			if pillButton(c.Key("download-cancel"), nil, "取消", p.hover.Over(p.bg), p.text).Clicked() {
 				a.cancelDownload()
 			}
@@ -149,13 +150,13 @@ func (a *app) downloadProgress(c *ui.Context) {
 					pt.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W * share, H: r.H}, p.accent, 3)
 				}
 			})
-			if job.total > 0 {
-				ui.Text(c, fmt.Sprintf("%s / %s", sizeText(job.got), sizeText(job.total))).FontSize(10.5).FontFeatures("tnum").TextColor(p.muted)
+			if q.size > 0 {
+				ui.Text(c, fmt.Sprintf("%s / %s", sizeText(q.done), sizeText(q.size))).FontSize(10.5).FontFeatures("tnum").TextColor(p.muted)
 			} else {
-				ui.Text(c, sizeText(job.got)).FontSize(10.5).FontFeatures("tnum").TextColor(p.muted)
+				ui.Text(c, sizeText(q.done)).FontSize(10.5).FontFeatures("tnum").TextColor(p.muted)
 			}
-			if len(a.downloadQueue) > 0 {
-				ui.Text(c, fmt.Sprintf("还有 %d 首", len(a.downloadQueue))).FontSize(10.5).TextColor(p.faint)
+			if len(a.downloadQ.waiting) > 0 {
+				ui.Text(c, fmt.Sprintf("还有 %d 首", len(a.downloadQ.waiting))).FontSize(10.5).TextColor(p.faint)
 			}
 		})
 	})

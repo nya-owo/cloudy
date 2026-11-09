@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -38,12 +39,10 @@ var chooseDownloadFolder = func(parent *mygo.Window, start string) (string, erro
 	return paths[0], nil
 }
 
-// downloadJob is the song being saved now, and how far it has come.
-type downloadJob struct {
-	track netease.Track
-	got   int64
-	total int64
-}
+// songKey names a download by its song.
+type songKey struct{}
+
+func (songKey) key(tr netease.Track) string { return strconv.FormatInt(tr.ID, 10) }
 
 // defaultDownloadFolder is where songs go until the listener names another
 // folder: Cloudy Downloads among their music.
@@ -329,21 +328,17 @@ func (a *app) startDownload(tr netease.Track) {
 		a.redraw()
 		return
 	}
-	if a.downloadJob != nil && a.downloadJob.track.ID == tr.ID {
+	q := &a.downloadQ
+	if cur, ok := q.current(); ok && cur.ID == tr.ID {
 		a.toast = "这首歌正在下载"
 		a.redraw()
 		return
 	}
-	for _, queued := range a.downloadQueue {
-		if queued.ID == tr.ID {
-			a.toast = "这首歌已经在下载队列里"
-			a.redraw()
-			return
-		}
+	if !q.add(tr) {
+		a.toast = "这首歌已经在下载队列里"
+		a.redraw()
+		return
 	}
-	a.downloadQueue = append(a.downloadQueue, tr)
-	// Asked again, a song that failed is tried again, not listed twice.
-	a.dropFailedDownloads(tr.ID)
 	a.toast = "已加入下载：" + tr.Name
 	a.pumpDownload()
 	a.saveDownloadQueue()
@@ -352,54 +347,31 @@ func (a *app) startDownload(tr netease.Track) {
 
 // pumpDownload starts the next song queued, unless one is downloading.
 func (a *app) pumpDownload() {
-	if a.downloadJob != nil || len(a.downloadQueue) == 0 {
+	q := &a.downloadQ
+	tr, ok := q.next()
+	if !ok {
 		return
 	}
-	tr := a.downloadQueue[0]
-	a.downloadQueue = a.downloadQueue[1:]
 	dir, err := a.ensureDownloadFolder()
 	if err != nil {
 		a.toast = "无法创建下载文件夹"
-		a.downloadQueue = nil
+		q.waiting = nil
 		return
 	}
 	level := a.downloadLevel()
-	job := &downloadJob{track: tr}
-	a.downloadJob = job
-	a.downloadGen++
-	gen := a.downloadGen
-	ctx, cancel := context.WithCancel(context.Background())
-	a.downloadCancel = cancel
-	go func() {
-		item, err := fetchDownload(ctx, tr, level, dir, func(got, total int64) {
-			a.post(func() {
-				if gen != a.downloadGen || a.downloadJob == nil {
-					return
-				}
-				a.downloadJob.got, a.downloadJob.total = got, total
-			})
-		})
+	q.run(tr, a.post, func(ctx context.Context, progress func(done, size int64)) func() {
+		item, err := fetchDownload(ctx, tr, level, dir, progress)
 		if err == nil {
 			item.Tagged = tagDownload(item)
 		}
-		a.post(func() {
-			if gen != a.downloadGen {
-				return
-			}
-			a.finishDownload(item, err)
-		})
-	}()
+		return func() { a.finishDownload(item, err) }
+	})
 }
 
 // finishDownload lists what arrived, or says why it did not, and starts the
 // next one queued.
 func (a *app) finishDownload(item download.Item, err error) {
-	var tr netease.Track
-	if a.downloadJob != nil {
-		tr = a.downloadJob.track
-	}
-	a.downloadJob, a.downloadCancel = nil, nil
-	defer a.saveDownloadQueue()
+	tr := a.downloadQ.finish()
 	switch {
 	case err == nil:
 		a.downloads = append([]download.Item{item}, a.downloads...)
@@ -414,25 +386,21 @@ func (a *app) finishDownload(item download.Item, err error) {
 		a.toast = "已取消下载"
 	case errors.Is(err, netease.ErrUnavailable):
 		a.toast = "这首歌暂时不能下载"
-		a.failDownload(tr, "没有下载权限")
+		a.downloadQ.fail(tr, "没有下载权限")
 	default:
 		a.toast = "下载失败：" + err.Error()
-		a.failDownload(tr, err.Error())
+		a.downloadQ.fail(tr, err.Error())
 	}
 	a.pumpDownload()
+	a.saveDownloadQueue()
 	a.redraw()
 }
 
 // cancelDownload stops the song being saved and goes on with the queue.
 func (a *app) cancelDownload() {
-	if a.downloadJob == nil {
+	if !a.downloadQ.stop() {
 		return
 	}
-	if a.downloadCancel != nil {
-		a.downloadCancel()
-	}
-	a.downloadGen++
-	a.downloadJob, a.downloadCancel = nil, nil
 	a.toast = "已取消下载"
 	a.pumpDownload()
 	a.saveDownloadQueue()

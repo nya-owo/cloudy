@@ -63,7 +63,7 @@ func (a *app) downloadAll(tracks []netease.Track) {
 			skipped++
 			continue
 		}
-		a.downloadQueue = append(a.downloadQueue, tr)
+		a.downloadQ.add(tr)
 		queued++
 	}
 	switch {
@@ -82,15 +82,7 @@ func (a *app) downloadAll(tracks []netease.Track) {
 // downloadPending reports whether the song is being saved or waits in the
 // download queue.
 func (a *app) downloadPending(id int64) bool {
-	if a.downloadJob != nil && a.downloadJob.track.ID == id {
-		return true
-	}
-	for _, tr := range a.downloadQueue {
-		if tr.ID == id {
-			return true
-		}
-	}
-	return false
+	return a.downloadQ.pending(songKey{}.key(netease.Track{ID: id}))
 }
 
 // likeAll likes every song of tracks not liked yet. The hearts fill at

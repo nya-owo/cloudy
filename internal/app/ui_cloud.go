@@ -103,8 +103,8 @@ func (a *app) cloudPage(c *ui.Context) {
 			queueLabel := "上传列表"
 			if n := a.uploadQueueCount(); n > 0 {
 				queueLabel = fmt.Sprintf("上传列表 %d", n)
-				if job := a.uploadJob; job != nil && job.all > 0 && job.sent > 0 {
-					queueLabel += fmt.Sprintf(" · %d%%", job.sent*100/job.all)
+				if q := &a.uploadQ; q.running != nil && q.size > 0 && q.done > 0 {
+					queueLabel += fmt.Sprintf(" · %d%%", q.done*100/q.size)
 				}
 			}
 			if pillButton(c.Key("uploads"), iconQueue, queueLabel, p.hover.Over(p.bg), p.text).Clicked() {

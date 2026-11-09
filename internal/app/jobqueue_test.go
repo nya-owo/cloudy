@@ -15,16 +15,11 @@ import (
 // What the download and upload queues hold, read the same way before and
 // after the queues share their code.
 
-func dlRunning(a *app) (netease.Track, bool) {
-	if a.downloadJob == nil {
-		return netease.Track{}, false
-	}
-	return a.downloadJob.track, true
-}
+func dlRunning(a *app) (netease.Track, bool) { return a.downloadQ.current() }
 
 func dlWaiting(a *app) []int64 {
 	var ids []int64
-	for _, tr := range a.downloadQueue {
+	for _, tr := range a.downloadQ.waiting {
 		ids = append(ids, tr.ID)
 	}
 	return ids
@@ -32,22 +27,17 @@ func dlWaiting(a *app) []int64 {
 
 func dlFailed(a *app) map[int64]string {
 	out := map[int64]string{}
-	for _, f := range a.downloadFailed {
-		out[f.Track.ID] = f.Reason
+	for _, f := range a.downloadQ.failed {
+		out[f.item.ID] = f.reason
 	}
 	return out
 }
 
-func upRunning(a *app) (cloudUpload, bool) {
-	if a.uploadJob == nil {
-		return cloudUpload{}, false
-	}
-	return a.uploadJob.item, true
-}
+func upRunning(a *app) (cloudUpload, bool) { return a.uploadQ.current() }
 
 func upWaiting(a *app) []string {
 	var out []string
-	for _, u := range a.uploadQueue {
+	for _, u := range a.uploadQ.waiting {
 		out = append(out, u.Title)
 	}
 	return out
@@ -55,8 +45,8 @@ func upWaiting(a *app) []string {
 
 func upFailed(a *app) map[string]string {
 	out := map[string]string{}
-	for _, f := range a.uploadFailed {
-		out[f.Title] = f.Reason
+	for _, f := range a.uploadQ.failed {
+		out[f.item.Title] = f.reason
 	}
 	return out
 }

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -133,18 +132,11 @@ func (a *app) fixDownloads() {
 	}()
 }
 
-// failedDownload is a song whose download failed, and why, kept for the
-// listener to try again from the queue's window.
+// failedDownload is a song whose download failed, and why, as the queue's
+// file keeps it.
 type failedDownload struct {
 	Track  netease.Track `json:"track"`
 	Reason string        `json:"reason"`
-}
-
-// queuedDownloads is the download queue as it is kept across launches: the
-// song downloading first, then those waiting, and those that failed.
-type queuedDownloads struct {
-	Queue  []netease.Track  `json:"queue"`
-	Failed []failedDownload `json:"failed,omitempty"`
 }
 
 // downloadQueuePath is where the queue is kept, beside the settings: none
@@ -159,90 +151,41 @@ func (a *app) downloadQueuePath() string {
 // saveDownloadQueue keeps the queue, so that a song waiting, or the one
 // downloading as the app quit, is downloaded once it opens again.
 func (a *app) saveDownloadQueue() {
-	path := a.downloadQueuePath()
-	if path == "" {
-		return
+	var failed []failedDownload
+	for _, f := range a.downloadQ.failed {
+		failed = append(failed, failedDownload{f.item, f.reason})
 	}
-	q := queuedDownloads{Failed: a.downloadFailed}
-	if a.downloadJob != nil {
-		q.Queue = append(q.Queue, a.downloadJob.track)
-	}
-	q.Queue = append(q.Queue, a.downloadQueue...)
-	if len(q.Queue) == 0 && len(q.Failed) == 0 {
-		os.Remove(path)
-		return
-	}
-	b, err := json.Marshal(q)
-	if err != nil {
-		return
-	}
-	writeFileAtomic(path, b, 0o600)
+	saveQueueFile(a.downloadQueuePath(), a.downloadQ.kept(), failed)
 }
 
 // restoreDownloadQueue picks the queue up where the app left it, once the
 // listener's session is back: the songs they may download depend on it.
 func (a *app) restoreDownloadQueue() {
-	if a.downloadsRestored {
+	q := &a.downloadQ
+	if q.restored {
 		return
 	}
-	a.downloadsRestored = true
-	path := a.downloadQueuePath()
-	if path == "" {
+	q.restored = true
+	kept, ok := readQueueFile[netease.Track, failedDownload](a.downloadQueuePath())
+	if !ok {
 		return
 	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return
+	var failed []failedJob[netease.Track]
+	for _, f := range kept.Failed {
+		failed = append(failed, failedJob[netease.Track]{f.Track, f.Reason})
 	}
-	var q queuedDownloads
-	if json.Unmarshal(b, &q) != nil {
-		return
-	}
-	a.downloadFailed = q.Failed
-	for _, tr := range q.Queue {
-		if !a.downloadPending(tr.ID) {
-			a.downloadQueue = append(a.downloadQueue, tr)
-		}
-	}
-	if len(q.Queue) > 0 {
+	q.restore(kept.Queue, failed)
+	if len(kept.Queue) > 0 {
 		a.toast = "继续下载上次没完成的歌曲"
 	}
 	a.pumpDownload()
 	a.redraw()
 }
 
-// failDownload keeps a song that failed to download, for trying again.
-func (a *app) failDownload(tr netease.Track, reason string) {
-	for i, f := range a.downloadFailed {
-		if f.Track.ID == tr.ID {
-			a.downloadFailed[i].Reason = reason
-			return
-		}
-	}
-	a.downloadFailed = append(a.downloadFailed, failedDownload{Track: tr, Reason: reason})
-}
-
 // retryDownloads queues again the failed songs of ids, or all of them for
 // none.
 func (a *app) retryDownloads(ids ...int64) {
-	want := map[int64]bool{}
-	for _, id := range ids {
-		want[id] = true
-	}
-	keep := a.downloadFailed[:0]
-	n := 0
-	for _, f := range a.downloadFailed {
-		if len(ids) > 0 && !want[f.Track.ID] {
-			keep = append(keep, f)
-			continue
-		}
-		if !a.downloadPending(f.Track.ID) {
-			a.downloadQueue = append(a.downloadQueue, f.Track)
-			n++
-		}
-	}
-	a.downloadFailed = keep
-	if n > 0 {
+	if n := a.downloadQ.retry(songKeys(ids)...); n > 0 {
 		a.toast = fmt.Sprintf("重新下载 %d 首", n)
 	}
 	a.pumpDownload()
@@ -250,21 +193,12 @@ func (a *app) retryDownloads(ids ...int64) {
 	a.redraw()
 }
 
-// dropFailedDownloads forgets the failed songs of ids, or all for none.
-func (a *app) dropFailedDownloads(ids ...int64) {
-	want := map[int64]bool{}
-	for _, id := range ids {
-		want[id] = true
+func songKeys(ids []int64) []string {
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = songKey{}.key(netease.Track{ID: id})
 	}
-	keep := a.downloadFailed[:0]
-	for _, f := range a.downloadFailed {
-		if len(ids) > 0 && !want[f.Track.ID] {
-			keep = append(keep, f)
-		}
-	}
-	a.downloadFailed = keep
-	a.saveDownloadQueue()
-	a.redraw()
+	return keys
 }
 
 // removeDownloadFiles takes away what was written beside a downloaded

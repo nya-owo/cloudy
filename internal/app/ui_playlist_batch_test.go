@@ -143,8 +143,8 @@ func TestPlaylistBatchInlineDownload(t *testing.T) {
 	if a.batch.on {
 		t.Fatal("batch stayed on after download")
 	}
-	if a.downloadJob == nil || a.downloadJob.track.ID != 1 {
-		t.Fatalf("job %+v", a.downloadJob)
+	if a.downloadQ.running == nil || a.downloadQ.running.ID != 1 {
+		t.Fatalf("job %+v", a.downloadQ.running)
 	}
 	a.cancelDownload()
 }
@@ -250,11 +250,11 @@ func TestPlaylistBatchDownloads(t *testing.T) {
 		{ID: 2, Name: "二", Privilege: &netease.Privilege{St: 0, Pl: 0}},
 		{ID: 3, Name: "三"},
 	})
-	if a.downloadJob == nil || a.downloadJob.track.ID != 1 {
-		t.Fatalf("job %+v", a.downloadJob)
+	if a.downloadQ.running == nil || a.downloadQ.running.ID != 1 {
+		t.Fatalf("job %+v", a.downloadQ.running)
 	}
-	if len(a.downloadQueue) != 1 || a.downloadQueue[0].ID != 3 {
-		t.Fatalf("queue %+v", a.downloadQueue)
+	if len(a.downloadQ.waiting) != 1 || a.downloadQ.waiting[0].ID != 3 {
+		t.Fatalf("queue %+v", a.downloadQ.waiting)
 	}
 	a.cancelDownload()
 }

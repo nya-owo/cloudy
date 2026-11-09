@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -42,7 +41,7 @@ type cloudUpload struct {
 	Artist string `json:"artist,omitempty"`
 	Album  string `json:"album,omitempty"`
 	Size   int64  `json:"size,omitempty"`
-	Reason string `json:"reason,omitempty"` // why it failed, for one that did
+	Reason string `json:"reason,omitempty"` // why it failed, in the queue's file
 }
 
 // name is what the upload is listed as.
@@ -54,12 +53,10 @@ func (u cloudUpload) name() string {
 	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
-// uploadJob is the song going up now, and how far it has come.
-type uploadJob struct {
-	item cloudUpload
-	sent int64
-	all  int64
-}
+// fileKey names an upload by its file.
+type fileKey struct{}
+
+func (fileKey) key(u cloudUpload) string { return uploadKey(u.Path) }
 
 // uploadKey compares paths as the system does: without regard to case on
 // Windows.
@@ -128,29 +125,17 @@ func (a *app) pickUploads() {
 
 // uploadPending reports whether path waits or goes up now.
 func (a *app) uploadPending(path string) bool {
-	key := uploadKey(path)
-	if a.uploadJob != nil && uploadKey(a.uploadJob.item.Path) == key {
-		return true
-	}
-	for _, u := range a.uploadQueue {
-		if uploadKey(u.Path) == key {
-			return true
-		}
-	}
-	return false
+	return a.uploadQ.pending(uploadKey(path))
 }
 
 // queueUploads adds songs to what goes up, those queued already once.
 func (a *app) queueUploads(items []cloudUpload, skipped int) {
 	added := 0
 	for _, u := range items {
-		if a.uploadPending(u.Path) {
-			continue
-		}
 		u.Reason = ""
-		a.dropFailedUploads(u.Path)
-		a.uploadQueue = append(a.uploadQueue, u)
-		added++
+		if a.uploadQ.add(u) {
+			added++
+		}
 	}
 	switch {
 	case added == 1 && skipped == 0:
@@ -171,47 +156,28 @@ func (a *app) queueUploads(items []cloudUpload, skipped int) {
 
 // pumpUpload starts the next song queued, unless one is going up.
 func (a *app) pumpUpload() {
-	if a.uploadJob != nil || len(a.uploadQueue) == 0 {
-		if a.uploadJob == nil && a.uploadedSome {
+	q := &a.uploadQ
+	u, ok := q.next()
+	if !ok {
+		if q.running == nil && a.uploadedSome {
 			// The drive changed: read it again once all went up.
 			a.uploadedSome = false
 			a.loadCloud(true)
 		}
 		return
 	}
-	u := a.uploadQueue[0]
-	a.uploadQueue = a.uploadQueue[1:]
-	a.uploadJob = &uploadJob{item: u, all: u.Size}
-	a.uploadGen++
-	gen := a.uploadGen
-	ctx, cancel := context.WithCancel(context.Background())
-	a.uploadCancel = cancel
 	meta := netease.CloudUploadMeta{Title: u.Title, Artist: u.Artist, Album: u.Album}
-	go func() {
-		_, err := uploadToCloud(ctx, u.Path, meta, func(sent, total int64) {
-			a.post(func() {
-				if gen != a.uploadGen || a.uploadJob == nil {
-					return
-				}
-				a.uploadJob.sent, a.uploadJob.all = sent, total
-			})
-		})
-		a.post(func() {
-			if gen != a.uploadGen {
-				return
-			}
-			a.finishUpload(err)
-		})
-	}()
+	q.run(u, a.post, func(ctx context.Context, progress func(done, size int64)) func() {
+		_, err := uploadToCloud(ctx, u.Path, meta, progress)
+		return func() { a.finishUpload(err) }
+	})
+	q.size = u.Size
 }
 
 // finishUpload says how the song went, and starts the next one queued.
 func (a *app) finishUpload(err error) {
-	var u cloudUpload
-	if a.uploadJob != nil {
-		u = a.uploadJob.item
-	}
-	a.uploadJob, a.uploadCancel = nil, nil
+	q := &a.uploadQ
+	u := q.finish()
 	switch {
 	case err == nil:
 		a.toast = "已上传到云盘：" + u.name()
@@ -220,13 +186,13 @@ func (a *app) finishUpload(err error) {
 		a.toast = "已取消上传"
 	case errors.Is(err, os.ErrNotExist):
 		a.toast = "上传失败：找不到文件"
-		a.failUpload(u, "找不到文件")
+		q.fail(u, "找不到文件")
 	case errors.Is(err, netease.ErrCloudFull):
 		a.toast = "云盘空间不足"
-		a.failUpload(u, "云盘空间不足")
+		q.fail(u, "云盘空间不足")
 	default:
 		a.toast = "上传失败：" + u.name()
-		a.failUpload(u, uploadReason(err))
+		q.fail(u, uploadReason(err))
 	}
 	a.pumpUpload()
 	a.saveUploadQueue()
@@ -243,42 +209,18 @@ func uploadReason(err error) string {
 	return msg
 }
 
-// failUpload keeps a song that failed to go up, for trying again.
-func (a *app) failUpload(u cloudUpload, reason string) {
-	u.Reason = reason
-	a.dropFailedUploads(u.Path)
-	a.uploadFailed = append(a.uploadFailed, u)
-}
-
-// dropFailedUploads forgets that path failed.
-func (a *app) dropFailedUploads(path string) {
-	key := uploadKey(path)
-	a.uploadFailed = slices.DeleteFunc(a.uploadFailed, func(f cloudUpload) bool { return uploadKey(f.Path) == key })
-}
-
 // retryUploads queues again the failed songs of paths, or all of them.
 func (a *app) retryUploads(paths ...string) {
-	want := map[string]bool{}
-	for _, p := range paths {
-		want[uploadKey(p)] = true
+	keys := make([]string, len(paths))
+	for i, p := range paths {
+		keys[i] = uploadKey(p)
 	}
-	var again, kept []cloudUpload
-	for _, f := range a.uploadFailed {
-		if len(want) == 0 || want[uploadKey(f.Path)] {
-			f.Reason = ""
-			again = append(again, f)
-		} else {
-			kept = append(kept, f)
-		}
-	}
-	a.uploadFailed = kept
-	for _, u := range again {
-		if !a.uploadPending(u.Path) {
-			a.uploadQueue = append(a.uploadQueue, u)
-		}
-	}
-	if len(again) > 0 {
-		a.toast = "重新上传 " + strconv.Itoa(len(again)) + " 首"
+	a.retryUploadKeys(keys...)
+}
+
+func (a *app) retryUploadKeys(keys ...string) {
+	if n := a.uploadQ.retry(keys...); n > 0 {
+		a.toast = "重新上传 " + strconv.Itoa(n) + " 首"
 	}
 	a.pumpUpload()
 	a.saveUploadQueue()
@@ -287,24 +229,13 @@ func (a *app) retryUploads(paths ...string) {
 
 // cancelUpload stops the song going up and goes on with the queue.
 func (a *app) cancelUpload() {
-	if a.uploadJob == nil {
+	if !a.uploadQ.stop() {
 		return
 	}
-	if a.uploadCancel != nil {
-		a.uploadCancel()
-	}
-	a.uploadGen++
-	a.uploadJob, a.uploadCancel = nil, nil
 	a.toast = "已取消上传"
 	a.pumpUpload()
 	a.saveUploadQueue()
 	a.redraw()
-}
-
-// queuedUploads is the upload queue as it is kept across launches.
-type queuedUploads struct {
-	Queue  []cloudUpload `json:"queue"`
-	Failed []cloudUpload `json:"failed,omitempty"`
 }
 
 // uploadQueuePath is where the queue of the account signed in is kept,
@@ -325,26 +256,16 @@ func (a *app) oldUploadQueuePath() string {
 }
 
 // saveUploadQueue keeps the queue, so that what waits, or went up as the app
-// quit, goes up once it opens again.
+// quit, goes up once it opens again. The songs that failed are kept with
+// why, in their Reason.
 func (a *app) saveUploadQueue() {
-	path := a.uploadQueuePath()
-	if path == "" {
-		return
+	var failed []cloudUpload
+	for _, f := range a.uploadQ.failed {
+		u := f.item
+		u.Reason = f.reason
+		failed = append(failed, u)
 	}
-	q := queuedUploads{Failed: a.uploadFailed}
-	if a.uploadJob != nil {
-		q.Queue = append(q.Queue, a.uploadJob.item)
-	}
-	q.Queue = append(q.Queue, a.uploadQueue...)
-	if len(q.Queue) == 0 && len(q.Failed) == 0 {
-		os.Remove(path)
-		return
-	}
-	b, err := json.Marshal(q)
-	if err != nil {
-		return
-	}
-	writeFileAtomic(path, b, 0o600)
+	saveQueueFile(a.uploadQueuePath(), a.uploadQ.kept(), failed)
 }
 
 // restoreUploadQueue picks the queue of the account signed in up where the
@@ -352,30 +273,28 @@ func (a *app) saveUploadQueue() {
 // queue kept by an earlier version, for no account in particular, goes to
 // the first account that signs in.
 func (a *app) restoreUploadQueue() {
+	q := &a.uploadQ
 	path := a.uploadQueuePath()
-	if a.uploadsRestored || path == "" {
+	if q.restored || path == "" {
 		return
 	}
-	a.uploadsRestored = true
-	b, err := os.ReadFile(path)
-	if err != nil {
+	q.restored = true
+	kept, ok := readQueueFile[cloudUpload, cloudUpload](path)
+	if !ok {
 		old := a.oldUploadQueuePath()
-		if b, err = os.ReadFile(old); err != nil {
+		if kept, ok = readQueueFile[cloudUpload, cloudUpload](old); !ok {
 			return
 		}
 		os.Remove(old)
 	}
-	var q queuedUploads
-	if json.Unmarshal(b, &q) != nil {
-		return
+	var failed []failedJob[cloudUpload]
+	for _, u := range kept.Failed {
+		reason := u.Reason
+		u.Reason = ""
+		failed = append(failed, failedJob[cloudUpload]{u, reason})
 	}
-	a.uploadFailed = q.Failed
-	for _, u := range q.Queue {
-		if !a.uploadPending(u.Path) {
-			a.uploadQueue = append(a.uploadQueue, u)
-		}
-	}
-	if len(q.Queue) > 0 {
+	q.restore(kept.Queue, failed)
+	if len(kept.Queue) > 0 {
 		a.toast = "继续上传上次没完成的歌曲"
 	}
 	a.pumpUpload()
@@ -404,16 +323,10 @@ func (a *app) uploadsFor(prof *netease.Profile) {
 // leaveUploads stops the upload under way and puts the queue away for the
 // account it was for.
 func (a *app) leaveUploads() {
-	busy := a.uploadJob != nil || len(a.uploadQueue) > 0
+	busy := a.uploadQ.count() > 0
 	a.saveUploadQueue()
-	if a.uploadCancel != nil {
-		a.uploadCancel()
-	}
-	a.uploadGen++
-	a.uploadJob, a.uploadCancel = nil, nil
-	a.uploadQueue, a.uploadFailed = nil, nil
+	a.uploadQ.reset()
 	a.uploadedSome = false
-	a.uploadsRestored = false
 	if busy {
 		a.toast = "账号已切换，已停止上传"
 	}

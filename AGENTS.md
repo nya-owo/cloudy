@@ -10,7 +10,7 @@
 - `internal/app`: everything else, in one package around the `app` struct (`app.go`). Files are named for what they do; `ui_*.go` build views:
   - Pages: `ui_pages.go` routes; `ui_discovery.go`, `ui_daily.go`, `ui_style_daily.go`, `ui_playlist.go`, `ui_album.go`, `ui_artist.go`, `ui_user.go`, `ui_mine.go`, `ui_search.go`, `ui_podcast.go`, `ui_radio.go`, `ui_recent.go`, `ui_cloud.go`, `ui_downloads.go`.
   - Player: `ui_player.go` (the bar), `ui_nowplaying.go` and `ui_stage*.go` (Now Playing and its lyric styles), `fullscreen.go`, `ui_float.go` (desktop lyrics and the mini window).
-  - Downloads: `downloads.go`, `downloads_more.go`, `ui_download_queue.go`. Cloud uploads: `cloud_upload.go`, `ui_upload_queue.go`.
+  - Downloads: `downloads.go`, `downloads_more.go`. Cloud uploads: `cloud_upload.go`. Both queues are a `jobQueue` (`jobqueue.go`: one job at a time, failures kept to retry, saved across launches), shown by one window, `ui_job_queue.go`.
   - Settings: `settings.go` (the stored choices) and `ui_settings.go`; `session.go` and `history.go` keep the queue and what was played. Write such files with `writeFileAtomic`.
   - Windows integration: `tray.go`, `thumbbar.go`, `taskbar_progress.go`, `keys.go` and `ui_shortcuts.go` (global shortcuts), `menu.go`, `updates.go` and `ui_update.go`.
   - Account: `login.go`, `ui_account.go` (`signedIn` resets what is personal; `accountGen` drops replies meant for the account before).
@@ -18,7 +18,7 @@
 
 ### Threads
 
-The app's state is read and changed on the main thread only, so it has no locks. Work that blocks (the network, the disk) runs in a goroutine and hands its result back with `a.post(func() { ... })`, which runs on the main thread and redraws. Bump a generation counter (`accountGen`, `uploadGen`, ...) when starting work that a later action can make stale, and drop the result if it changed.
+The app's state is read and changed on the main thread only, so it has no locks. Work that blocks (the network, the disk) runs in a goroutine and hands its result back with `a.post(func() { ... })`, which runs on the main thread and redraws. Bump a generation counter (`accountGen`, `jobQueue.gen`, ...) when starting work that a later action can make stale, and drop the result if it changed.
 
 ### The framework
 
