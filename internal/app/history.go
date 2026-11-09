@@ -134,7 +134,7 @@ func (a *app) saveHistory() {
 		if gen <= w.last {
 			return
 		}
-		if os.WriteFile(path+".part", b, 0o600) == nil && os.Rename(path+".part", path) == nil {
+		if writeFileAtomic(path, b, 0o600) == nil {
 			w.last = gen
 		}
 	}()

@@ -451,12 +451,7 @@ func (a *app) transcriptWrite() func() {
 		return nil
 	}
 	return func() {
-		if os.MkdirAll(filepath.Dir(path), 0o755) == nil {
-			tmp := path + ".tmp"
-			if os.WriteFile(tmp, b, 0o644) == nil {
-				os.Rename(tmp, path)
-			}
-		}
+		writeFileAtomic(path, b, 0o644)
 	}
 }
 

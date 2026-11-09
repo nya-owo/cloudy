@@ -37,7 +37,7 @@ func (a *app) saveSession() {
 	if err != nil {
 		return
 	}
-	if os.WriteFile(path+".part", b, 0o600) == nil && os.Rename(path+".part", path) == nil {
+	if writeFileAtomic(path, b, 0o600) == nil {
 		a.savedSession = string(b)
 	}
 }

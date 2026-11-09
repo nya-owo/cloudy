@@ -176,9 +176,7 @@ func (a *app) saveDownloadQueue() {
 	if err != nil {
 		return
 	}
-	if os.WriteFile(path+".part", b, 0o600) == nil {
-		os.Rename(path+".part", path)
-	}
+	writeFileAtomic(path, b, 0o600)
 }
 
 // restoreDownloadQueue picks the queue up where the app left it, once the

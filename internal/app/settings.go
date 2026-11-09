@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -262,11 +263,24 @@ func moveDir(old, dir string) {
 func loadSettings() settings {
 	s := defaultSettings()
 	if path, err := settingsPath(); err == nil {
-		if b, err := os.ReadFile(path); err == nil {
-			json.Unmarshal(b, &s)
-		}
-		s.path = path
+		s = loadSettingsFrom(path)
 	}
+	return s
+}
+
+// loadSettingsFrom reads the settings at path, or returns the defaults. A
+// file that does not parse is moved aside to settings.json.bad first, so
+// the next save, of the defaults, does not lose what it held for good.
+func loadSettingsFrom(path string) settings {
+	s := defaultSettings()
+	if b, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(b, &s); err != nil {
+			log.Println("settings:", err)
+			os.Rename(path, path+".bad")
+			s = defaultSettings()
+		}
+	}
+	s.path = path
 	return s
 }
 
@@ -281,10 +295,11 @@ func (s settings) save() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := writeFileAtomic(path, b, 0o600); err != nil {
+		log.Println("settings:", err)
 		return err
 	}
-	return os.WriteFile(path, b, 0o600)
+	return nil
 }
 
 // applyAppearance makes the windows light, dark, or follow the system.
