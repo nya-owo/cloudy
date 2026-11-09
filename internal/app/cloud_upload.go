@@ -123,11 +123,6 @@ func (a *app) pickUploads() {
 	}()
 }
 
-// uploadPending reports whether path waits or goes up now.
-func (a *app) uploadPending(path string) bool {
-	return a.up.queue.pending(uploadKey(path))
-}
-
 // queueUploads adds songs to what goes up, those queued already once.
 func (a *app) queueUploads(items []cloudUpload, skipped int) {
 	added := 0
@@ -209,16 +204,9 @@ func uploadReason(err error) string {
 	return msg
 }
 
-// retryUploads queues again the failed songs of paths, or all of them.
-func (a *app) retryUploads(paths ...string) {
-	keys := make([]string, len(paths))
-	for i, p := range paths {
-		keys[i] = uploadKey(p)
-	}
-	a.retryUploadKeys(keys...)
-}
-
-func (a *app) retryUploadKeys(keys ...string) {
+// retryUploads queues again the failed songs of keys, their uploadKey, or
+// all of them for none.
+func (a *app) retryUploads(keys ...string) {
 	if n := a.up.queue.retry(keys...); n > 0 {
 		a.toast = "重新上传 " + strconv.Itoa(n) + " 首"
 	}

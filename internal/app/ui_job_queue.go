@@ -247,13 +247,9 @@ func (a *app) clearUploadQueue() {
 	a.redraw()
 }
 
-// removeUpload takes one song out of the queue, cancels it while it goes
-// up, or forgets it once it failed.
-func (a *app) removeUpload(path string) {
-	a.removeUploadKey(uploadKey(path))
-}
-
-func (a *app) removeUploadKey(key string) {
+// removeUpload takes the song of key, its uploadKey, out of the queue,
+// cancels it while it goes up, or forgets it once it failed.
+func (a *app) removeUpload(key string) {
 	delete(a.up.view.selected, key)
 	u, how := a.up.queue.remove(key)
 	switch how {
@@ -273,9 +269,9 @@ func (a *app) uploadQueueDialog(c *ui.Context) {
 		id: "upload-queue", keys: "uq", title: "上传列表", verb: "上传", noun: "列表",
 		icon: iconUpload, cancelChosen: "取消所选", preparing: true,
 		add:      a.pickUploads,
-		retry:    func(key string) { a.retryUploadKeys(key) },
-		retryAll: func() { a.retryUploadKeys() },
-		remove:   a.removeUploadKey,
+		retry:    func(key string) { a.retryUploads(key) },
+		retryAll: func() { a.retryUploads() },
+		remove:   a.removeUpload,
 		cancel:   a.cancelSelectedUploads,
 		clear:    a.clearUploadQueue,
 	})

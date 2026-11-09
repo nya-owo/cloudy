@@ -244,11 +244,11 @@ func TestUploadQueueRemove(t *testing.T) {
 		{Path: `C:\Music\c.mp3`, Title: "丙"}, {Path: `C:\Music\d.mp3`, Title: "丁"},
 	}, 0)
 	a.finishUpload(errors.New("x")) // 甲 fails, 乙 starts
-	a.removeUpload(`C:\Music\C.MP3`)
+	a.removeUpload(uploadKey(`C:\Music\C.MP3`))
 	if w := upWaiting(a); len(w) != 1 || w[0] != "丁" || a.toast != "已从上传列表移除：丙" {
 		t.Fatalf("waiting %v toast %q", w, a.toast)
 	}
-	a.removeUpload(`C:\Music\b.mp3`)
+	a.removeUpload(uploadKey(`C:\Music\b.mp3`))
 	if u, _ := upRunning(a); u.Title != "丁" || a.toast != "已取消上传" {
 		t.Fatalf("running %+v toast %q", u, a.toast)
 	}
