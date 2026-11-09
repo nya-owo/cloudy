@@ -125,7 +125,7 @@ func (a *app) pickUploads() {
 
 // uploadPending reports whether path waits or goes up now.
 func (a *app) uploadPending(path string) bool {
-	return a.uploadQ.pending(uploadKey(path))
+	return a.up.queue.pending(uploadKey(path))
 }
 
 // queueUploads adds songs to what goes up, those queued already once.
@@ -133,7 +133,7 @@ func (a *app) queueUploads(items []cloudUpload, skipped int) {
 	added := 0
 	for _, u := range items {
 		u.Reason = ""
-		if a.uploadQ.add(u) {
+		if a.up.queue.add(u) {
 			added++
 		}
 	}
@@ -156,12 +156,12 @@ func (a *app) queueUploads(items []cloudUpload, skipped int) {
 
 // pumpUpload starts the next song queued, unless one is going up.
 func (a *app) pumpUpload() {
-	q := &a.uploadQ
+	q := &a.up.queue
 	u, ok := q.next()
 	if !ok {
-		if q.running == nil && a.uploadedSome {
+		if q.running == nil && a.up.sentSome {
 			// The drive changed: read it again once all went up.
-			a.uploadedSome = false
+			a.up.sentSome = false
 			a.loadCloud(true)
 		}
 		return
@@ -176,12 +176,12 @@ func (a *app) pumpUpload() {
 
 // finishUpload says how the song went, and starts the next one queued.
 func (a *app) finishUpload(err error) {
-	q := &a.uploadQ
+	q := &a.up.queue
 	u := q.finish()
 	switch {
 	case err == nil:
 		a.toast = "已上传到云盘：" + u.name()
-		a.uploadedSome = true
+		a.up.sentSome = true
 	case errors.Is(err, context.Canceled):
 		a.toast = "已取消上传"
 	case errors.Is(err, os.ErrNotExist):
@@ -219,7 +219,7 @@ func (a *app) retryUploads(paths ...string) {
 }
 
 func (a *app) retryUploadKeys(keys ...string) {
-	if n := a.uploadQ.retry(keys...); n > 0 {
+	if n := a.up.queue.retry(keys...); n > 0 {
 		a.toast = "重新上传 " + strconv.Itoa(n) + " 首"
 	}
 	a.pumpUpload()
@@ -229,7 +229,7 @@ func (a *app) retryUploadKeys(keys ...string) {
 
 // cancelUpload stops the song going up and goes on with the queue.
 func (a *app) cancelUpload() {
-	if !a.uploadQ.stop() {
+	if !a.up.queue.stop() {
 		return
 	}
 	a.toast = "已取消上传"
@@ -243,10 +243,10 @@ func (a *app) cancelUpload() {
 // were never loaded, as in tests. Each account has its own, as the songs
 // go up to its drive.
 func (a *app) uploadQueuePath() string {
-	if a.settings.path == "" || a.uploadUser == 0 {
+	if a.settings.path == "" || a.up.user == 0 {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(a.settings.path), "upload-queue-"+strconv.FormatInt(a.uploadUser, 10)+".json")
+	return filepath.Join(filepath.Dir(a.settings.path), "upload-queue-"+strconv.FormatInt(a.up.user, 10)+".json")
 }
 
 // oldUploadQueuePath is where versions up to 1.2.6 kept the queue, for
@@ -260,12 +260,12 @@ func (a *app) oldUploadQueuePath() string {
 // why, in their Reason.
 func (a *app) saveUploadQueue() {
 	var failed []cloudUpload
-	for _, f := range a.uploadQ.failed {
+	for _, f := range a.up.queue.failed {
 		u := f.item
 		u.Reason = f.reason
 		failed = append(failed, u)
 	}
-	saveQueueFile(a.uploadQueuePath(), a.uploadQ.kept(), failed)
+	saveQueueFile(a.uploadQueuePath(), a.up.queue.kept(), failed)
 }
 
 // restoreUploadQueue picks the queue of the account signed in up where the
@@ -273,7 +273,7 @@ func (a *app) saveUploadQueue() {
 // queue kept by an earlier version, for no account in particular, goes to
 // the first account that signs in.
 func (a *app) restoreUploadQueue() {
-	q := &a.uploadQ
+	q := &a.up.queue
 	path := a.uploadQueuePath()
 	if q.restored || path == "" {
 		return
@@ -311,11 +311,11 @@ func (a *app) uploadsFor(prof *netease.Profile) {
 	if prof != nil {
 		id = prof.UserID
 	}
-	if id != a.uploadUser {
-		if a.uploadUser != 0 {
+	if id != a.up.user {
+		if a.up.user != 0 {
 			a.leaveUploads()
 		}
-		a.uploadUser = id
+		a.up.user = id
 	}
 	a.restoreUploadQueue()
 }
@@ -323,10 +323,10 @@ func (a *app) uploadsFor(prof *netease.Profile) {
 // leaveUploads stops the upload under way and puts the queue away for the
 // account it was for.
 func (a *app) leaveUploads() {
-	busy := a.uploadQ.count() > 0
+	busy := a.up.queue.count() > 0
 	a.saveUploadQueue()
-	a.uploadQ.reset()
-	a.uploadedSome = false
+	a.up.queue.reset()
+	a.up.sentSome = false
 	if busy {
 		a.toast = "账号已切换，已停止上传"
 	}

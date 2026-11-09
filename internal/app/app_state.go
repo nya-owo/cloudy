@@ -24,3 +24,12 @@ type downloadState struct {
 	view      queueWindow
 	deletion  downloadDelete
 }
+
+// uploadState is the songs going up to the cloud drive, as downloads come
+// down.
+type uploadState struct {
+	queue    jobQueue[cloudUpload, fileKey]
+	user     int64 // the account the queue goes up for, 0 for none
+	sentSome bool  // a song went up since the drive was last read
+	view     queueWindow
+}

@@ -138,12 +138,8 @@ type app struct {
 	shownTracks  []netease.Track // the songs the page lists now, for choosing among them
 	recent       recentState     // the songs played on this computer
 	cloud        cloudState      // the listener's music cloud drive
-	// The songs going up to the cloud drive, as downloads come down.
-	uploadQ      jobQueue[cloudUpload, fileKey]
-	uploadUser   int64 // the account the queue goes up for, 0 for none
-	uploadedSome bool  // a song went up since the drive was last read
-	uploadView   queueWindow
-	outputList   outputList // the audio outputs, as last listed
+	up           uploadState     // the songs going up to the cloud drive
+	outputList   outputList      // the audio outputs, as last listed
 	comments     commentState
 	tabCount     rollState // the count on the comments' tab, as it rolls
 

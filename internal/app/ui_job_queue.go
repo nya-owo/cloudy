@@ -206,16 +206,16 @@ func (a *app) downloadQueueDialog(c *ui.Context) {
 
 // uploadQueueCount is the songs going up, waiting, and failed.
 func (a *app) uploadQueueCount() int {
-	return a.uploadQ.count() + len(a.uploadQ.failed)
+	return a.up.queue.count() + len(a.up.queue.failed)
 }
 
 func (a *app) openUploadQueue() {
-	a.uploadView.reset()
+	a.up.view.reset()
 	a.redraw()
 }
 
 func (a *app) uploadQueueEntries() []queueEntry {
-	return queueEntries(&a.uploadQ, func(u cloudUpload) queueEntry {
+	return queueEntries(&a.up.queue, func(u cloudUpload) queueEntry {
 		sub := u.Artist
 		if sub == "" {
 			sub = sizeText(u.Size)
@@ -227,10 +227,10 @@ func (a *app) uploadQueueEntries() []queueEntry {
 // cancelSelectedUploads takes the chosen songs out of the queue, cancels the
 // one going up if it was chosen, and forgets the chosen ones that failed.
 func (a *app) cancelSelectedUploads() {
-	if len(a.uploadView.selected) == 0 {
+	if len(a.up.view.selected) == 0 {
 		return
 	}
-	if n := dropChosen(&a.uploadQ, &a.uploadView, a.cancelUpload); n > 0 {
+	if n := dropChosen(&a.up.queue, &a.up.view, a.cancelUpload); n > 0 {
 		a.toast = fmt.Sprintf("已取消 %d 项上传", n)
 	}
 	a.saveUploadQueue()
@@ -238,8 +238,8 @@ func (a *app) cancelSelectedUploads() {
 }
 
 func (a *app) clearUploadQueue() {
-	a.uploadView.selected = map[string]bool{}
-	if a.uploadQ.clear() {
+	a.up.view.selected = map[string]bool{}
+	if a.up.queue.clear() {
 		a.cancelUpload()
 	}
 	a.toast = "已清空上传列表"
@@ -254,8 +254,8 @@ func (a *app) removeUpload(path string) {
 }
 
 func (a *app) removeUploadKey(key string) {
-	delete(a.uploadView.selected, key)
-	u, how := a.uploadQ.remove(key)
+	delete(a.up.view.selected, key)
+	u, how := a.up.queue.remove(key)
 	switch how {
 	case wasRunning:
 		a.cancelUpload()
@@ -269,7 +269,7 @@ func (a *app) removeUploadKey(key string) {
 
 // uploadQueueDialog is the upload list's own window.
 func (a *app) uploadQueueDialog(c *ui.Context) {
-	a.queueDialog(c, &a.uploadView, a.uploadQueueEntries(), len(a.uploadQ.waiting), len(a.uploadQ.failed), queueSpec{
+	a.queueDialog(c, &a.up.view, a.uploadQueueEntries(), len(a.up.queue.waiting), len(a.up.queue.failed), queueSpec{
 		id: "upload-queue", keys: "uq", title: "上传列表", verb: "上传", noun: "列表",
 		icon: iconUpload, cancelChosen: "取消所选", preparing: true,
 		add:      a.pickUploads,

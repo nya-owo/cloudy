@@ -33,11 +33,11 @@ func dlFailed(a *app) map[int64]string {
 	return out
 }
 
-func upRunning(a *app) (cloudUpload, bool) { return a.uploadQ.current() }
+func upRunning(a *app) (cloudUpload, bool) { return a.up.queue.current() }
 
 func upWaiting(a *app) []string {
 	var out []string
-	for _, u := range a.uploadQ.waiting {
+	for _, u := range a.up.queue.waiting {
 		out = append(out, u.Title)
 	}
 	return out
@@ -45,7 +45,7 @@ func upWaiting(a *app) []string {
 
 func upFailed(a *app) map[string]string {
 	out := map[string]string{}
-	for _, f := range a.uploadQ.failed {
+	for _, f := range a.up.queue.failed {
 		out[f.item.Title] = f.reason
 	}
 	return out
@@ -253,8 +253,8 @@ func TestUploadQueueRemove(t *testing.T) {
 		t.Fatalf("running %+v toast %q", u, a.toast)
 	}
 	a.openUploadQueue()
-	a.uploadView.selected[uploadKey(`C:\Music\a.mp3`)] = true
-	a.uploadView.selected[uploadKey(`C:\Music\d.mp3`)] = true
+	a.up.view.selected[uploadKey(`C:\Music\a.mp3`)] = true
+	a.up.view.selected[uploadKey(`C:\Music\d.mp3`)] = true
 	a.cancelSelectedUploads()
 	if _, ok := upRunning(a); ok || len(upFailed(a)) != 0 || a.toast != "已取消 2 项上传" {
 		t.Fatalf("failed %v toast %q", upFailed(a), a.toast)

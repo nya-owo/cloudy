@@ -103,7 +103,7 @@ func (a *app) cloudPage(c *ui.Context) {
 			queueLabel := "上传列表"
 			if n := a.uploadQueueCount(); n > 0 {
 				queueLabel = fmt.Sprintf("上传列表 %d", n)
-				if q := &a.uploadQ; q.running != nil && q.size > 0 && q.done > 0 {
+				if q := &a.up.queue; q.running != nil && q.size > 0 && q.done > 0 {
 					queueLabel += fmt.Sprintf(" · %d%%", q.done*100/q.size)
 				}
 			}
