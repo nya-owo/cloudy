@@ -158,8 +158,6 @@ type app struct {
 	radioStarting string // the radio asked for its first songs, or ""
 	radioGen      int    // distinguishes requests for the same radio
 
-	scrub       float64
-	scrubbing   bool
 	volume      float64
 	volumeOpen  bool        // the volume popover of the player bar shows
 	volumeHover hoverOpen   // how the pointer opened it, and when it last was over it

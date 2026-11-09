@@ -15,8 +15,6 @@ import (
 
 var white = ui.RGB(255, 255, 255)
 
-var npSpring = ui.Animation{Spring: ui.SpringOptions{Duration: 450 * time.Millisecond, Bounce: 0.08}}
-
 // npSettle is how long Now Playing takes to come or go, its spring at rest.
 const npSettle = 640 * time.Millisecond
 

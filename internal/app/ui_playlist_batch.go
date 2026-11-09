@@ -303,28 +303,6 @@ func (a *app) batchAll(pl *netease.Playlist) bool {
 	return len(pl.Tracks) > 0 && a.batchCount(pl) == len(pl.Tracks)
 }
 
-func (a *app) batchSelectAll(pl *netease.Playlist) {
-	if a.batchAll(pl) {
-		a.batch.selected = map[int64]bool{}
-	} else {
-		a.batch.selected = make(map[int64]bool, len(pl.Tracks))
-		for _, tr := range pl.Tracks {
-			a.batch.selected[tr.ID] = true
-		}
-	}
-	a.redraw()
-}
-
-func (a *app) batchTracks(pl *netease.Playlist) []netease.Track {
-	var out []netease.Track
-	for _, tr := range pl.Tracks {
-		if a.batch.selected[tr.ID] {
-			out = append(out, tr)
-		}
-	}
-	return out
-}
-
 func (a *app) downloadBatchCount() int {
 	n := 0
 	for _, it := range a.downloads {
