@@ -181,9 +181,7 @@ type app struct {
 	morph                 floatMorph        // the player on its way to or from it
 	deskBtn               ui.Rect           // the player bar's button of the desktop lyrics, while it shows
 	deskFly               deskFlight        // the desktop lyrics on their way out of it or back
-	sleepTimer            *time.Timer       // pauses the music once the time set is up
-	sleepAt               time.Time         // when
-	sleepMinutes          int               // what the listener chose
+	sleep                 sleepState        // the timer that pauses the music
 	shortcutKeys          map[string]string // the global key registered for each action
 	registeredKeys        []string          // the global keys held, to let them go
 	shortcutSetup         shortcutEditor
@@ -334,7 +332,7 @@ func Run() error {
 			a.remember(t, played, ended)
 		}
 		a.pl.SongStopped = func() {
-			a.sleepMinutes = 0
+			a.sleep.minutes = 0
 			a.toast = "定时结束，本首播完后已暂停"
 		}
 		a.pl.Changed = func() {

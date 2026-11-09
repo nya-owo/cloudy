@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"github.com/egoist/mygo/ui"
 
 	"netease-music-mygo/internal/download"
@@ -32,4 +34,11 @@ type uploadState struct {
 	user     int64 // the account the queue goes up for, 0 for none
 	sentSome bool  // a song went up since the drive was last read
 	view     queueWindow
+}
+
+// sleepState is the timer that pauses the music once the time set is up.
+type sleepState struct {
+	timer   *time.Timer
+	at      time.Time // when
+	minutes int       // what the listener chose
 }
