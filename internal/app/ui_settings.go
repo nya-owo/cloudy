@@ -583,6 +583,9 @@ func scaleLabel(v float64) string {
 func (a *app) settingsLyricsPage(k *settingsKit) {
 	s := &a.settings
 	k.group("播放页歌词", func() {
+		k.row("透视歌词", "Apple Music 风格的歌词动效，当前句在画面中部高亮，上下歌词沿圆弧滚动", func() {
+			k.toggle("lyric-perspective", "透视歌词", &s.LyricPerspective, false, nil)
+		})
 		k.row("歌词翻译", "在歌词下方显示翻译；播放栏的翻译按钮也能切换", func() {
 			k.toggle("lyric-trans", "歌词翻译", &s.LyricTrans, false, nil)
 		})

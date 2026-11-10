@@ -557,16 +557,27 @@ func (a *app) lyricsPane(c *ui.Context, tr *netease.Track, h float32) bool {
 		a.lyricTrack, a.lyricAt = tr.ID, -2
 		a.lyricScroll, a.lyricGlide = ui.ScrollState{}, lyricGlide{}
 	}
+	beforeY := a.lyricScroll.Y
 	lag := a.lyricGlide.step(c, &a.lyricScroll)
 
 	scroll := ui.Scroll(c.Key("lyrics")).Grow(1).TrackScroll(&a.lyricScroll).Padding(0, 8, h*0.5, 0)
+	st := linesStyle{size: 30 * a.lyricScale(), weight: 800, lineHeight: 1.25, shift: shift}
+	if box := scroll.LayoutBounds(); a.settings.LyricPerspective && box.H > 0 {
+		// The sung line passes through the rightmost point of the arc.
+		st.focusY = max(1, min(box.H, h*0.53-box.Y))
+		st.arcY = box.Y + st.focusY + lag + a.lyricScroll.Y - beforeY
+		st.arcInset, st.arcRadius = min(125, box.W*0.17), box.H*0.82
+		scroll.Padding(st.focusY, 8+st.arcInset, max(h*0.5, box.H-st.focusY), 0).
+			TransformOrigin(0, st.focusY/box.H).RotateY(-19).Perspective(max(700, box.W*2.7))
+	}
 	dim, quiet := a.quietShown(c, scroll, tr, lines, loaded)
 	if dim > 0.98 {
 		// Under the hot comment, gone, not drawn faint.
 		scroll.Invisible()
 	}
 	defer a.quietCard(c, dim, h*0.18)
-	a.timedLines(c, scroll, lines, pos, cur, lag, linesStyle{size: 30 * a.lyricScale(), weight: 800, lineHeight: 1.25, quiet: quiet, shift: shift}, nil)
+	st.quiet = quiet
+	a.timedLines(c, scroll, lines, pos, cur, lag, st, nil)
 	return true
 }
 
@@ -576,6 +587,10 @@ type linesStyle struct {
 	size       float32
 	weight     int
 	lineHeight float32
+	focusY     float32 // active line's anchor in the pane, or 0 in the regular view
+	arcY       float32 // arc center in the previous layout's coordinates
+	arcInset   float32 // horizontal room reserved for the arc's rightmost point
+	arcRadius  float32
 	quiet      bool
 	shift      time.Duration // how early they run, as a line clicked seeks
 }
@@ -593,30 +608,51 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 			for i, l := range lines {
 				line := ui.ButtonBase(c.Key(i)).Column().AlignItems(ui.Start).Padding(10, 12).Radius(14).Gap(6).FocusRing(false).Label(l.Text)
 				on := i == cur
+				hovered := line.Hovered()
 				alpha := float32(0.28)
 				if on {
 					alpha = 1
-				} else if line.Hovered() {
+				} else if hovered {
 					alpha = 0.55
+				}
+				blur := float32(0)
+				if st.focusY > 0 && !on && !hovered && !line.FocusVisible() && !a.settings.PowerSaver {
+					distance := abs32(float32(i - cur))
+					alpha *= 1 - 0.5*clamp01((distance-1)/4)
+					blur = min(4, 0.9*distance)
 				}
 				if st.quiet {
 					// Nearly gone under a hot comment.
 					alpha *= quietFaded
 				}
-				if line.Hovered() {
+				if hovered {
 					line.Background(white.Alpha(0.06))
 				}
 				scale := float32(0.94)
 				if on {
 					scale = 1
 				}
-				line.TransformOrigin(0, 0.5).AnimatePose(ui.Pose{Scale: scale}, ui.Animation{Spring: ui.SpringOptions{Duration: 600 * time.Millisecond, Bounce: 0.1}})
+				line.TransformOrigin(0, 0.5)
+				if bounds := line.LayoutBounds(); st.arcRadius > 0 && bounds.H > 0 {
+					// The left end follows a circle; the line turns gently
+					// outward with its radius as the lyrics roll past.
+					r := st.arcRadius
+					dy := bounds.Y + bounds.H/2 - st.arcY
+					dy = max(-0.8*r, min(0.8*r, dy))
+					dx := float32(math.Sqrt(float64(r*r - dy*dy)))
+					angle := float32(math.Atan2(float64(dy), float64(dx))) * (0.45 * 180 / math.Pi)
+					line.Rotate(angle).Translate(max(0, st.arcInset-(r-dx)), 0)
+				}
+				line.AnimatePose(ui.Pose{Scale: scale}, ui.Animation{Spring: ui.SpringOptions{Duration: 600 * time.Millisecond, Bounce: 0.1}})
 				glows := on && a.settings.NpLight && !st.quiet
 				line.Children(func() {
 					// The line fades as a pose, in frames that only paint, rather
 					// than building the view at the display's rate as it does.
 					text := ui.Column(c).AlignItems(ui.Start).Gap(6)
 					text.AnimatePose(ui.Pose{Fade: 1 - alpha}, ui.Animation{Duration: 380 * time.Millisecond})
+					if st.focusY > 0 && !a.settings.PowerSaver {
+						text.Blur(text.AnimateTo("depth", blur, ui.Animation{Duration: 300 * time.Millisecond}))
+					}
 					text.Children(func() {
 						ui.Box(c.Key("sung")).Children(func() {
 							if on && len(l.Words) > 0 {
@@ -654,14 +690,31 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 			foot()
 		}
 	})
-	// Bring the line sung to a third of the way down, once it changed.
+	box := scroll.LayoutBounds()
+	focus := lyricFocus{}
+	if st.focusY > 0 {
+		focus = lyricFocus{st.focusY, box.W, box.H, st.size, c.Theme().Font, a.settings.LyricTrans}
+	}
+	// Wait for layout to take the new padding or type size before measuring the target.
+	if focus != a.lyricGlide.focus {
+		a.lyricGlide.focus = focus
+		a.lyricAt = -2
+		c.AnimationFrame()
+		return
+	}
+	// Bring the line sung to the center of the arc, or a third of the way down.
 	if cur != a.lyricAt {
-		box := scroll.Bounds()
+		if st.focusY == 0 {
+			box = scroll.Bounds()
+		}
 		target := float32(0)
 		if active.Valid() {
 			// Where the glide is going, without where it still is.
 			if lb := active.LayoutBounds(); lb.H > 0 && box.H > 0 {
 				target = lb.Y - box.Y + a.lyricScroll.Y - box.H*0.3
+				if st.focusY > 0 {
+					target = lb.Y + lb.H/2 - box.Y + a.lyricScroll.Y - st.focusY
+				}
 			} else {
 				return // not laid out yet: the next frame scrolls
 			}
@@ -673,6 +726,13 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 			a.lyricGlide.on = false
 		}
 	}
+}
+
+// lyricFocus records the layout inputs that can move the line relative to the arc.
+type lyricFocus struct {
+	y, width, height, size float32
+	font                   string
+	translation            bool
 }
 
 // lyricGlide scrolls the lyrics to the line sung, as a critically damped
@@ -694,6 +754,7 @@ type lyricGlide struct {
 	target  float32
 	pending bool
 	set     float32 // the offset it set
+	focus   lyricFocus
 }
 
 // lyricOmega is the spring's ω: a line or two away, it comes within half a

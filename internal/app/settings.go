@@ -75,6 +75,8 @@ type settings struct {
 	Shortcuts map[string]string `json:"shortcuts,omitempty"`
 	// LyricScale is the size of lyrics, of their size as designed: 0 for 1.
 	LyricScale float64 `json:"lyricScale,omitempty"`
+	// LyricPerspective displays scrolling lyrics on an arc in Now Playing.
+	LyricPerspective bool `json:"lyricPerspective,omitempty"`
 	// LyricShift is how many milliseconds a song's lyrics run early, by its
 	// ID, where they don't keep time with it.
 	LyricShift map[int64]int `json:"lyricShift,omitempty"`
