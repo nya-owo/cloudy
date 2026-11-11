@@ -203,6 +203,7 @@ type app struct {
 	heldURL               string           // and the cover the card gave it
 	playSpot              ui.Rect          // where the play button last built is
 	backdropCache         backdropCache    // the backdrop of Now Playing, as last painted
+	pageGlass             pageGlass        // the cover the cover backgrounds show, as it changes
 	windowMaterial        mygo.Vibrancy
 	npArt                 *artwork     // the cover whose colors Now Playing shows
 	npCoverState          coverState   // the cover of Now Playing, as it is tilted and flicked

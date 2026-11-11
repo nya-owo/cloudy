@@ -157,31 +157,70 @@ func (a *app) view(c *ui.Context) {
 // glassPageBackdrop shares the cached, blurred cover across both panes.
 // Only the image and a tint are painted; no full-window refraction runs.
 func (a *app) glassPageBackdrop(page ui.Element) {
-	var art *artwork
+	g := &a.pageGlass
 	url := ""
 	if tr := a.pl.Current(); tr != nil {
 		url = tr.Album.PicURL
 	}
-	if url != "" {
-		if cover := a.art.get(netease.Sized(url, 600), true); cover != nil && !cover.failed {
-			art = cover
+	// The cover of the next song shows once it is ready, faded over the
+	// one before, which stays till then: a cover on its way has neither
+	// colors nor a backdrop, and would show the plain page between them.
+	switch {
+	case url == "":
+		g.to(nil)
+	default:
+		if cover := a.art.get(netease.Sized(url, 600), true); cover != nil && cover.failed {
+			g.to(nil)
+		} else if cover != nil && cover.backdrop != nil {
+			g.to(cover)
 		}
 	}
 	tint := a.pal.bg
-	if art != nil && !art.failed {
-		tint = art.tint
+	if g.shown != nil {
+		tint = g.shown.tint
 	} else if a.chosenAccent() != "" {
 		tint = a.pal.accent
 	}
 	tint = page.AnimateColor("glass-tint", tint, ui.Animation{Duration: backdropFade})
-	bmp := backdrop(art)
-	in := artIn(page, bmp)
+	at, still := g.at, a.motion == motionOff
+	if still || time.Since(at) >= backdropFade {
+		g.before = nil
+	}
+	shown, before := backdrop(g.shown), backdrop(g.before)
 	page.Draw(func(p *ui.Painter, r ui.Rect) {
+		// How far the cover has come, in each frame painted.
+		k := float32(1)
+		if !still {
+			if k = min(float32(time.Since(at))/float32(backdropFade), 1); k < 1 {
+				k = 1 - (1-k)*(1-k)*(1-k) // eased out, as Now Playing's backdrop fades
+			}
+		}
 		p.FillGradient(r, ui.LinearGradient{Angle: 180, From: tint.Alpha(0.28), To: tint.Alpha(0.04)}, 0)
-		if bmp != nil {
-			p.ImageRegion(bmp, ui.Rect{}, r, ui.ImageOptions{Tint: white.Alpha(0.32 * in)})
+		if before != nil {
+			p.ImageRegion(before, ui.Rect{}, r, ui.ImageOptions{Tint: white.Alpha(0.32 * (1 - k))})
+		}
+		if shown != nil {
+			p.ImageRegion(shown, ui.Rect{}, r, ui.ImageOptions{Tint: white.Alpha(0.32 * k)})
+		}
+		if k < 1 {
+			p.AnimationFrame()
 		}
 	})
+}
+
+// pageGlass is the cover the cover backgrounds show, and the one it fades
+// from, as the song changes.
+type pageGlass struct {
+	shown, before *artwork
+	at            time.Time // when shown came
+}
+
+// to shows art from now, fading over what showed.
+func (g *pageGlass) to(art *artwork) {
+	if art == g.shown {
+		return
+	}
+	g.before, g.shown, g.at = g.shown, art, time.Now()
 }
 
 func (a *app) shortcuts(c *ui.Context) {
