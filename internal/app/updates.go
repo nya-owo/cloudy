@@ -88,7 +88,8 @@ func (a *app) checkedUpdates(up *mygo.Update, err error) {
 	switch {
 	case u.up != nil && a.settings.UpdateInstall:
 		// Installed in the background, for the next launch: nothing to ask.
-		u.open = false
+		// Asked for, the pane stays, saying what it found as it downloads.
+		u.open = !u.auto
 		a.installUpdate()
 	case u.up != nil:
 		u.open = true
@@ -123,6 +124,9 @@ func (a *app) installUpdate() {
 				u.err = "安装失败：" + err.Error()
 			} else {
 				u.ready = true
+				// Said at the first launch of it.
+				a.settings.UpdateNotes = &updateNotes{Version: up.Version, Notes: up.Notes}
+				a.settings.save()
 				if !u.open {
 					a.toast = "新版本已装好，下次打开软件时生效"
 				}

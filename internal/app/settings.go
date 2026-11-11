@@ -65,6 +65,13 @@ type settings struct {
 	UpdateChecks  bool  `json:"updateChecks"`
 	UpdateInstall bool  `json:"updateInstall"`
 	UpdateChecked int64 `json:"updateChecked,omitempty"`
+	// LastVersion is the version that last ran, which tells the first
+	// launch after an update; UpdateNotes are the notes of the update the
+	// app installed, said at that launch. CoverNoticed is set once the
+	// listener was told the cover backgrounds are on.
+	LastVersion  string       `json:"lastVersion,omitempty"`
+	UpdateNotes  *updateNotes `json:"updateNotes,omitempty"`
+	CoverNoticed bool         `json:"coverNoticed,omitempty"`
 	// AlbumSort is how the albums the listener saved are listed: by time,
 	// name or artist; empty for the time.
 	AlbumSort string `json:"albumSort,omitempty"`
@@ -198,6 +205,8 @@ type settings struct {
 	SaverBefore *savedEffects `json:"saverBefore,omitempty"`
 
 	path string // where they were loaded from, and are saved to
+	// loaded is whether they came from a file: the app ran here before.
+	loaded bool
 }
 
 func defaultSettings() settings {
@@ -321,6 +330,8 @@ func loadSettingsFrom(path string) settings {
 			log.Println("settings:", err)
 			os.Rename(path, path+".bad")
 			s = defaultSettings()
+		} else {
+			s.loaded = true
 		}
 	}
 	s.path = path

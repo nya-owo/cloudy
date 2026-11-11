@@ -133,6 +133,7 @@ func (a *app) view(c *ui.Context) {
 	a.globalGlassDialog(c)
 	a.accentDialog(c)
 	a.updateDialog(c)
+	a.whatsNewDialog(c)
 	a.shortcutEditorDialog(c)
 	a.fontPickerDialog(c)
 	a.effectsDialog(c)

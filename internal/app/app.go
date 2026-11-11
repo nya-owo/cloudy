@@ -216,6 +216,7 @@ type app struct {
 	settingsView settingsView    // the settings panel
 	shownLines   shownCache      // the lyrics shown, without credits if hidden
 	update       updateState     // the update pane, and the update it found
+	whatsNew     whatsNewState   // what the version updated to brought, said once
 	cacheUsed    int64           // the bytes the song cache takes, -1 until measured
 	updates      bool            // the update plugin is used (useUpdater)
 	fontList     []uiFont        // the fonts on offer here (fontChoices)
@@ -385,6 +386,7 @@ func Run() error {
 		})
 		// A version that came out since the app last ran shows soon after
 		// it opens, and one a day after that, if the listener asks for it.
+		a.noteVersion(mygo.App.Version())
 		go a.autoCheckUpdates()
 		if shotHook != nil {
 			shotHook(a)

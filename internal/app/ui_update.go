@@ -95,9 +95,15 @@ func (a *app) updateNotes(c *ui.Context, up *mygo.Update, ink paneInk) {
 	if up == nil {
 		return
 	}
-	lines := updateNotesLines(up.Notes)
+	a.notesBox(c, up.Version, up.Notes, ink)
+}
+
+// notesBox shows release notes of version in a box of their own, which
+// scrolls when they run long.
+func (a *app) notesBox(c *ui.Context, version, notes string, ink paneInk) {
+	lines := updateNotesLines(notes)
 	// The notes repeat the version in a heading, which the pane says.
-	if len(lines) > 0 && strings.TrimSpace(lines[0]) == strings.TrimSpace(up.Version) {
+	if len(lines) > 0 && sameVersion(lines[0], version) {
 		lines = lines[1:]
 	}
 	if len(lines) == 0 {

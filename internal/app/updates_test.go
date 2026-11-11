@@ -116,14 +116,19 @@ func TestCheckedUpdates(t *testing.T) {
 	}
 	defer func() { installUpdate = real }()
 	a.settings.UpdateInstall = true
-	a.checkedUpdates(&mygo.Update{Version: "9.9.9"}, nil)
-	select {
-	case <-installed:
-	case <-time.After(2 * time.Second):
-		t.Fatal("did not install the update it was told to")
-	}
-	if a.update.open {
-		t.Error("asked about an update it installs in the background")
+	for _, auto := range []bool{true, false} {
+		a.update = updateState{auto: auto}
+		a.checkedUpdates(&mygo.Update{Version: "9.9.9"}, nil)
+		select {
+		case <-installed:
+		case <-time.After(2 * time.Second):
+			t.Fatal("did not install the update it was told to")
+		}
+		// Its own check installs in the background; one the listener
+		// asked for says what it found as it downloads.
+		if a.update.open == auto {
+			t.Errorf("auto %v: the pane open is %v", auto, a.update.open)
+		}
 	}
 }
 
