@@ -130,6 +130,8 @@ type app struct {
 	npPaneTop    float32   // how far the cover beside the pane starts below its top
 	lyricScroll  ui.ScrollState
 	lyricGlide   lyricGlide
+	lyricWheel   float32   // the wheel over a lyric value, short of a step
+	lyricWheelAt time.Time // when it last turned, its value not kept yet
 	lyricAt      int
 	lyricTrack   int64
 	queueList    ui.ListState
