@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"netease-music-mygo/internal/lyrics"
@@ -17,6 +16,15 @@ var white = ui.RGB(255, 255, 255)
 
 // npSettle is how long Now Playing takes to come or go, its spring at rest.
 const npSettle = 640 * time.Millisecond
+
+// npTextStart is when the playback controls and lyrics begin to appear.
+const npTextStart = 0.45
+
+// npPageBackground fades out what the transparent view still shows through
+// before the page is unmounted, and fades it back after it is built again.
+func npPageBackground(progress float32) float32 {
+	return 1 - easeRange(progress, 0.52, 1)
+}
 
 // How Now Playing opens and closes. They end at rest rather than settling as
 // a spring does, for what flies to land with nothing left of its speed, and
@@ -50,6 +58,19 @@ func (a *app) npState(c *ui.Context) (open, settled bool) {
 	return open, now.Sub(a.npChangedAt) >= npSettle
 }
 
+// npProgress is shared by the playback view and the page beneath it, so
+// their handover stays in sync even if the animation reverses midway.
+func (a *app) npProgress(root ui.Element, open bool) float32 {
+	to, move := float32(0), npClosing
+	if open {
+		to, move = 1, npOpening
+	}
+	if a.motion == motionOff || a.pl.Current() == nil {
+		return to
+	}
+	return clamp01(root.AnimateTo("now-playing", to, move))
+}
+
 // nowPlayingLayer holds Now Playing over the whole window, growing out of
 // the player bar as it opens and folding back into it as it closes: the
 // bar's shape opens up to the window, showing the view through it, the view
@@ -57,25 +78,16 @@ func (a *app) npState(c *ui.Context) (open, settled bool) {
 // moves its box, not a transform, as a clip moved by one is drawn on the CPU.
 func (a *app) nowPlayingLayer(c *ui.Context, open, settled bool) {
 	w, h := c.Size()
-	if a.npK > 0.002 {
+	k := a.npK
+	dim := 0.4 * k
+	if a.settings.GlobalGlass {
+		dim *= npPageBackground(k)
+	}
+	if dim > 0.001 {
 		ui.Box(c.Key("now-playing-dim")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().
-			Background(ui.RGB(0, 0, 0)).Opacity(0.4 * a.npK)
+			Background(ui.RGB(0, 0, 0)).Opacity(dim)
 	}
 	layer := ui.Box(c.Key("now-playing-layer")).Absolute()
-	to := float32(0)
-	if open {
-		to = 1
-	}
-	// An empty Animation is the default one, not none.
-	k := to
-	if a.motion != motionOff {
-		move := npOpening
-		if !open {
-			move = npClosing
-		}
-		k = clamp01(layer.AnimateTo("open", to, move))
-	}
-	a.npK = k
 	if !open && settled || a.pl.Current() == nil {
 		// Closed: nothing to paint or click.
 		a.backdropCache = backdropCache{}
@@ -125,6 +137,11 @@ func (a *app) nowPlayingView(c *ui.Context) {
 
 	root := ui.Box(c.Key("now-playing")).Absolute().Top(0).Left(0).Right(0).Bottom(0).
 		Background(ui.Hex("#0b0b0d")).TextColor(white)
+	artOpacity := float32(1)
+	if a.settings.GlobalGlass && c.Vibrancy() {
+		root.Background(ui.Transparent)
+		artOpacity = 0.53
+	}
 	// The pointer is over the view whenever it is in the window.
 	pointerIn := root.Hovered()
 	a.npPointer = pointerIn
@@ -135,12 +152,13 @@ func (a *app) nowPlayingView(c *ui.Context) {
 		root.Opacity(easeRange(k, 0, 0.3))
 	}
 	root.Children(func() {
-		a.backdrop(c, shown, tint)
+		a.backdrop(c, shown, tint, artOpacity)
+
 		// Over the backdrop, which is positioned too: positioned elements
 		// paint over those in the flow.
 		body := ui.Column(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() { a.nowPlayingBody(c, tr, art, accent, w, h, pointerIn) })
 		if k < 1 {
-			body.Opacity(easeRange(k, 0.45, 0.95))
+			body.Opacity(easeRange(k, npTextStart, 0.95))
 		}
 	})
 }
@@ -412,18 +430,13 @@ func (a *app) npTabs() []npTab {
 func (a *app) paneTabs(c *ui.Context, row ui.Element) {
 	move := ui.Animation{Spring: ui.SpringOptions{Duration: 340 * time.Millisecond, Bounce: 0.12}}
 	x, w, h := row.AnimateTo("pill-x", a.npPill.X, move), row.AnimateTo("pill-w", a.npPill.W, move), a.npPill.H
-	frosted := a.settings.GlassPanels
 	// Drawn on the row, under the tabs: over them, it would bend their words.
 	row.Draw(func(p *ui.Painter, r ui.Rect) {
 		if w <= 0 {
 			return
 		}
 		pill := ui.Rect{X: r.X + x, Y: r.Y + (r.H-h)/2, W: w, H: h}
-		if frosted {
-			glass.Paint(p, pill, h/2, glass.Glass{Style: glass.Clear, Tint: white.Alpha(0.14)})
-		} else {
-			p.Fill(pill, white.Alpha(0.14), h/2)
-		}
+		p.Fill(pill, white.Alpha(0.14), h/2)
 	})
 	for _, t := range a.npTabs() {
 		label := t.label
@@ -580,16 +593,36 @@ func (a *app) lyricsPane(c *ui.Context, tr *netease.Track, h float32) bool {
 		a.lyricTrack, a.lyricAt = tr.ID, -2
 		a.lyricScroll, a.lyricGlide = ui.ScrollState{}, lyricGlide{}
 	}
+	beforeY := a.lyricScroll.Y
 	lag := a.lyricGlide.step(c, &a.lyricScroll)
 
 	scroll := ui.Scroll(c.Key("lyrics")).Grow(1).TrackScroll(&a.lyricScroll).Padding(0, 8, h*0.5, 0)
+	if a.settings.LyricPerspective {
+		scroll.Effect(scrollEdgeFade{depth: 72, top: easeRange(a.lyricScroll.Y, 0, 16), bottom: 1})
+	}
+	st := linesStyle{size: 30 * a.lyricScale(), weight: 800, lineHeight: 1.25, shift: shift}
+	if a.settings.LyricPerspective {
+		st.tilt = 2 * clamp01(float32(a.settings.LyricTilt))
+		if a.motion != motionOff {
+			st.bounce = clamp01(float32(a.settings.LyricBounce))
+		}
+	}
+	if box := scroll.LayoutBounds(); st.tilt > 0 && box.H > 0 {
+		// The sung line passes through the rightmost point of the arc.
+		st.focusY = max(1, min(box.H, h*0.53-box.Y))
+		st.arcY = box.Y + st.focusY + lag + a.lyricScroll.Y - beforeY
+		st.arcInset, st.arcRadius = min(125, box.W*0.17), box.H*0.82
+		scroll.Padding(st.focusY, 8+st.arcInset*st.tilt, max(h*0.5, box.H-st.focusY), 0).
+			TransformOrigin(0, st.focusY/box.H).RotateY(-19 * st.tilt).Perspective(max(700, box.W*2.7))
+	}
 	dim, quiet := a.quietShown(c, scroll, tr, lines, loaded)
 	if dim > 0.98 {
 		// Under the hot comment, gone, not drawn faint.
 		scroll.Invisible()
 	}
 	defer a.quietCard(c, dim, h*0.18)
-	a.timedLines(c, scroll, lines, pos, cur, lag, linesStyle{size: 30 * a.lyricScale(), weight: 800, lineHeight: 1.25, quiet: quiet, shift: shift}, nil)
+	st.quiet = quiet
+	a.timedLines(c, scroll, lines, pos, cur, lag, st, nil)
 	return true
 }
 
@@ -599,6 +632,12 @@ type linesStyle struct {
 	size       float32
 	weight     int
 	lineHeight float32
+	focusY     float32 // active line's anchor in the pane, or 0 in the regular view
+	arcY       float32 // arc center in the previous layout's coordinates
+	arcInset   float32 // horizontal room reserved for the arc's rightmost point
+	arcRadius  float32
+	tilt       float32 // 1 preserves the original arc, 0 uses the flat layout
+	bounce     float32 // the strength of the automatic scroll's overshoot
 	quiet      bool
 	shift      time.Duration // how early they run, as a line clicked seeks
 }
@@ -617,30 +656,51 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 				l = a.npLine(l)
 				line := ui.ButtonBase(c.Key(i)).Column().AlignItems(ui.Start).Padding(10, 12).Radius(14).Gap(6).FocusRing(false).Label(l.Text)
 				on := i == cur
+				hovered := line.Hovered()
 				alpha := float32(0.28)
 				if on {
 					alpha = 1
-				} else if line.Hovered() {
+				} else if hovered {
 					alpha = 0.55
+				}
+				blur := float32(0)
+				if st.focusY > 0 && !on && !hovered && !line.FocusVisible() && !a.settings.PowerSaver {
+					distance := abs32(float32(i - cur))
+					alpha *= 1 - 0.5*clamp01((distance-1)/4)
+					blur = min(4, 0.9*distance)
 				}
 				if st.quiet {
 					// Nearly gone under a hot comment.
 					alpha *= quietFaded
 				}
-				if line.Hovered() {
+				if hovered {
 					line.Background(white.Alpha(0.06))
 				}
 				scale := float32(0.94)
 				if on {
 					scale = 1
 				}
-				line.TransformOrigin(0, 0.5).AnimatePose(ui.Pose{Scale: scale}, ui.Animation{Spring: ui.SpringOptions{Duration: 600 * time.Millisecond, Bounce: 0.1}})
+				line.TransformOrigin(0, 0.5)
+				if bounds := line.LayoutBounds(); st.arcRadius > 0 && bounds.H > 0 {
+					// The left end follows a circle; the line turns gently
+					// outward with its radius as the lyrics roll past.
+					r := st.arcRadius
+					dy := bounds.Y + bounds.H/2 - st.arcY
+					dy = max(-0.8*r, min(0.8*r, dy))
+					dx := float32(math.Sqrt(float64(r*r - dy*dy)))
+					angle := float32(math.Atan2(float64(dy), float64(dx))) * (0.45 * 180 / math.Pi)
+					line.Rotate(angle*st.tilt).Translate(max(0, st.arcInset-(r-dx))*st.tilt, 0)
+				}
+				line.AnimatePose(ui.Pose{Scale: scale}, ui.Animation{Spring: ui.SpringOptions{Duration: 600 * time.Millisecond, Bounce: 0.1}})
 				glows := on && a.settings.NpLight && !st.quiet
 				line.Children(func() {
 					// The line fades as a pose, in frames that only paint, rather
 					// than building the view at the display's rate as it does.
 					text := ui.Column(c).AlignItems(ui.Start).Gap(6)
 					text.AnimatePose(ui.Pose{Fade: 1 - alpha}, ui.Animation{Duration: 380 * time.Millisecond})
+					if st.focusY > 0 && !a.settings.PowerSaver {
+						text.Blur(text.AnimateTo("depth", blur, ui.Animation{Duration: 300 * time.Millisecond}))
+					}
 					text.Children(func() {
 						ui.Box(c.Key("sung")).Children(func() {
 							if on && len(l.Words) > 0 {
@@ -678,21 +738,38 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 			foot()
 		}
 	})
-	// Bring the line sung to a third of the way down, once it changed:
-	// not while the listener looks through the lines.
+	box := scroll.LayoutBounds()
+	focus := lyricFocus{}
+	if st.focusY > 0 {
+		focus = lyricFocus{st.focusY, box.W, box.H, st.size, st.tilt, c.Theme().Font, a.settings.LyricTrans}
+	}
+	// Wait for layout to take the new padding or type size before measuring the target.
+	if focus != a.lyricGlide.focus {
+		a.lyricGlide.focus = focus
+		a.lyricAt = -2
+		c.AnimationFrame()
+		return
+	}
+	// Bring the line sung to the center of the arc, or a third of the way down.
+	// Not while the listener looks through the lines.
 	if cur != a.lyricAt && !a.lyricGlide.holding(c, scroll) {
-		box := scroll.Bounds()
+		if st.focusY == 0 {
+			box = scroll.Bounds()
+		}
 		target := float32(0)
 		if active.Valid() {
 			// Where the glide is going, without where it still is.
 			if lb := active.LayoutBounds(); lb.H > 0 && box.H > 0 {
 				target = lb.Y - box.Y + a.lyricScroll.Y - box.H*0.3
+				if st.focusY > 0 {
+					target = lb.Y + lb.H/2 - box.Y + a.lyricScroll.Y - st.focusY
+				}
 			} else {
 				return // not laid out yet: the next frame scrolls
 			}
 		}
 		a.lyricAt = cur
-		a.lyricGlide.to(c, &a.lyricScroll, min(max(0, target), a.lyricScroll.MaxY))
+		a.lyricGlide.to(c, &a.lyricScroll, min(max(0, target), a.lyricScroll.MaxY), st.bounce)
 		if a.npK < 0.5 {
 			// Opening: they are there, rather than scrolling as the view grows.
 			a.lyricGlide.on = false
@@ -700,8 +777,15 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 	}
 }
 
-// lyricGlide scrolls the lyrics to the line sung, as a critically damped
-// spring, as ScrollTo's would. ScrollTo moves the offset in every frame,
+// lyricFocus records the layout inputs that can move the line relative to the arc.
+type lyricFocus struct {
+	y, width, height, size, tilt float32
+	font                         string
+	translation                  bool
+}
+
+// lyricGlide scrolls the lyrics to the line sung with a damped spring.
+// ScrollTo moves the offset in every frame,
 // and MyGo builds the view again in the frame after each that moved it,
 // and its spring creeps over the last pixel for half a second: with a line
 // following another every second or two, most of a song. So the offset
@@ -709,10 +793,9 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 // what the glide has still to go, its lag, which settles to nothing within
 // half a pixel.
 type lyricGlide struct {
-	on bool
-	// The lag t after start: (a + b·t)·e^(−ωt), in DIPs.
-	a, b  float64
-	start time.Time
+	on                     bool
+	a, b, decay, frequency float64
+	start                  time.Time
 	// The offset it goes to, set in the next frame (pending), with the lag
 	// that holds the lines back from it: the layout of the frame that
 	// chose it takes the offset too, the lines built without the lag.
@@ -721,7 +804,8 @@ type lyricGlide struct {
 	set     float32 // the offset it set
 	// When the listener last scrolled the lines: they stay where they
 	// were taken for a while (lyricHold), to pick a line from.
-	took time.Time
+	took  time.Time
+	focus lyricFocus
 }
 
 // lyricHold is how long the lines stay where the listener scrolled them
@@ -760,20 +844,35 @@ func (g *lyricGlide) at(now time.Time) (lag, v float64) {
 		return 0, 0
 	}
 	t := now.Sub(g.start).Seconds()
-	e := math.Exp(-lyricOmega * t)
-	return (g.a + g.b*t) * e, (g.b - lyricOmega*(g.a+g.b*t)) * e
+	e := math.Exp(-g.decay * t)
+	if g.frequency == 0 {
+		lag := g.a + g.b*t
+		return lag * e, (g.b - g.decay*lag) * e
+	}
+	sin, cos := math.Sincos(g.frequency * t)
+	lag = g.a*cos + g.b*sin
+	return lag * e, (g.frequency*(g.b*cos-g.a*sin) - g.decay*lag) * e
 }
 
 // to scrolls s to target from the next frame, gliding from where it
 // shows, at the speed it went if it was on its way.
-func (g *lyricGlide) to(c *ui.Context, s *ui.ScrollState, target float32) {
+func (g *lyricGlide) to(c *ui.Context, s *ui.ScrollState, target, bounce float32) {
 	now := c.Now()
 	lag, v := g.at(now)
 	shown := float64(s.Y) + lag
 	g.target, g.pending = target, true
 	g.on = !c.Preferences().ReduceMotion
 	g.start, g.a = now, shown-float64(target)
-	g.b = v + lyricOmega*g.a
+	// Long seeks should land gently as well. Limit the bounce of a jump
+	// across many lines without changing the speed of ordinary line changes.
+	strength := float64(bounce) * 220 / max(220, math.Abs(g.a))
+	ratio := 1 - 0.45*strength
+	g.decay = lyricOmega * ratio
+	g.frequency = lyricOmega * math.Sqrt(1-ratio*ratio)
+	g.b = v + g.decay*g.a
+	if g.frequency > 0 {
+		g.b /= g.frequency
+	}
 	c.AnimationFrame()
 }
 

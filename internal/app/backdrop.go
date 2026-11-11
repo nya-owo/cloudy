@@ -123,7 +123,7 @@ type backdropCache struct {
 }
 
 // backdrop paints the backdrop behind Now Playing, still or fog.
-func (a *app) backdrop(c *ui.Context, art *artwork, tint ui.Color) {
+func (a *app) backdrop(c *ui.Context, art *artwork, tint ui.Color, opacity float32) {
 	pl := a.pl
 	fog, still := a.settings.Fog, c.Preferences().ReduceMotion
 	ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().Draw(func(p *ui.Painter, r ui.Rect) {
@@ -165,12 +165,12 @@ func (a *app) backdrop(c *ui.Context, art *artwork, tint ui.Color) {
 				}
 			})
 		}
-		p.Image(bd.canvas.Bitmap(), r, ui.FillBox)
+		p.ImageRegion(bd.canvas.Bitmap(), ui.Rect{}, r, ui.ImageOptions{Tint: white.Alpha(opacity)})
 		if bd.before != nil {
 			if k := float32(now.Sub(bd.fadeAt)) / float32(backdropFade); k < 1 {
 				// Eased out, as it fades.
 				k = 1 - (1-k)*(1-k)*(1-k)
-				p.ImageRegion(bd.before.Bitmap(), ui.Rect{}, r, ui.ImageOptions{Tint: white.Alpha(1 - k)})
+				p.ImageRegion(bd.before.Bitmap(), ui.Rect{}, r, ui.ImageOptions{Tint: white.Alpha(opacity * (1 - k))})
 				p.AnimationFrame()
 			} else {
 				bd.before = nil

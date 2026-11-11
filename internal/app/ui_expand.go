@@ -476,6 +476,17 @@ func (a *app) pageCover(c *ui.Context, url string) {
 // navPillMatch is the pill behind the page chosen in the sidebar.
 type navPillMatch struct{}
 
+// navRowContent keeps row content above the flat selection tint.
+func (a *app) navRowContent(c *ui.Context, button ui.Element, selected bool, padding float32, content func()) {
+	button.AlignSelf(ui.Stretch).Children(func() {
+		if selected {
+			a.navPill(c)
+		}
+		ui.Row(c.Key("nav-content")).Absolute().Top(0).Left(0).Right(0).Bottom(0).
+			PaddingX(padding).Gap(10).AlignItems(ui.Center).PassThrough().Children(content)
+	})
+}
+
 // navPill is that pill, which slides from the page chosen before.
 func (a *app) navPill(c *ui.Context) {
 	alpha := float32(0.12)
@@ -486,27 +497,6 @@ func (a *app) navPill(c *ui.Context) {
 	if a.motion == motionFull {
 		pill.Transition(ui.ElementTransition{Animation: &motionPane, Match: navPillMatch{}})
 	}
-}
-
-// scrollFades fades a list under its edges, where there is more of it.
-func (a *app) scrollFades(c *ui.Context, s *ui.ScrollState) {
-	color := a.sideEdge
-	fade := func(key string, shown bool, from ui.Color, to ui.Color, top bool) {
-		if !shown {
-			return
-		}
-		e := ui.Box(c.Key(key)).Absolute().Left(0).Right(0).Height(26).PassThrough()
-		if top {
-			e.Top(0)
-		} else {
-			e.Bottom(0)
-		}
-		e.Draw(func(p *ui.Painter, r ui.Rect) {
-			p.FillGradient(r, ui.LinearGradient{Angle: 180, From: from, To: to}, 0)
-		})
-	}
-	fade("nav-top", s.Y > 1, color, color.Alpha(0), true)
-	fade("nav-foot", s.Y < s.MaxY-1, color.Alpha(0), color, false)
 }
 
 // coverAccent is the accent the cover playing gives, if it gives one: a

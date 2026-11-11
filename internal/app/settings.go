@@ -35,7 +35,10 @@ type settings struct {
 	Font string `json:"font,omitempty"`
 	// LiquidGlass floats the player bar as a capsule of glass. Off is kept
 	// too, without omitempty: left out, it would load as the default.
-	LiquidGlass bool `json:"liquidGlass"`
+	LiquidGlass  bool `json:"liquidGlass"`
+	GlobalGlass  bool `json:"globalGlass,omitempty"`
+	SidebarGlass bool `json:"sidebarGlass"`
+	MainGlass    bool `json:"mainGlass"`
 	// NpLight gives the line sung, the progress bar and the volume a faint
 	// glow in Now Playing (ui_light.go). As for LiquidGlass, off is kept too.
 	NpLight bool `json:"npLight"`
@@ -75,6 +78,11 @@ type settings struct {
 	Shortcuts map[string]string `json:"shortcuts,omitempty"`
 	// LyricScale is the size of lyrics, of their size as designed: 0 for 1.
 	LyricScale float64 `json:"lyricScale,omitempty"`
+	// LyricPerspective displays scrolling lyrics on an arc in Now Playing.
+	LyricPerspective bool `json:"lyricPerspective,omitempty"`
+	// Zero is meaningful for both sliders, so keep it when saving.
+	LyricTilt   float64 `json:"lyricTilt"`
+	LyricBounce float64 `json:"lyricBounce"`
 	// LyricShift is how many milliseconds a song's lyrics run early, by its
 	// ID, where they don't keep time with it.
 	LyricShift map[int64]int `json:"lyricShift,omitempty"`
@@ -193,7 +201,26 @@ type settings struct {
 }
 
 func defaultSettings() settings {
-	return settings{UpdateChecks: true, BarSpin: true, GlobalKeys: true, NotchActivity: true, Quality: "exhigh", Appearance: "system", LiquidGlass: true, NpLight: true, GlowLevel: 0.5, GlassClear: 0.6, GlassBend: 0.3, GlassPanels: true, Volume: 0.8, Normalize: true, AppIcon: "dock-and-menubar", CacheMB: 2048, Captions: true, LyricTrans: true, DeskWords: true}
+	return settings{UpdateChecks: true, BarSpin: true, GlobalKeys: true, NotchActivity: true, Quality: "exhigh", Appearance: "system", LiquidGlass: true, SidebarGlass: true, MainGlass: true, NpLight: true, GlowLevel: 0.5, GlassClear: 0.6, GlassBend: 0.3, GlassPanels: true, Volume: 0.8, Normalize: true, AppIcon: "dock-and-menubar", CacheMB: 2048, Captions: true, LyricTrans: true, LyricTilt: 0.5, LyricBounce: 0.5, DeskWords: true}
+}
+
+func (s settings) playerGlass() bool  { return !s.PowerSaver && (s.GlobalGlass || s.LiquidGlass) }
+func (s settings) panelGlass() bool   { return !s.PowerSaver && (s.GlobalGlass || s.GlassPanels) }
+func (s settings) sidebarGlass() bool { return !s.PowerSaver && (s.GlobalGlass || s.SidebarGlass) }
+func (s settings) mainGlass() bool    { return !s.PowerSaver && (s.GlobalGlass || s.MainGlass) }
+
+// mainWindowMaterial keeps the sidebar's material (Mica on Windows 11)
+// under the cover-colored background: the clear one (Acrylic) shows the
+// desktop through, costs more, and darkens the light appearance over a
+// dark desktop. Only global glass, which asks first, takes the clear one.
+func (s settings) mainWindowMaterial() mygo.Vibrancy {
+	if s.PowerSaver {
+		return mygo.VibrancyNone
+	}
+	if s.GlobalGlass {
+		return mygo.VibrancyGlassClear
+	}
+	return mygo.VibrancySidebar
 }
 
 func settingsPath() (string, error) {

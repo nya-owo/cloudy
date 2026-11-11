@@ -345,18 +345,18 @@ func (a *app) batchCheck(c *ui.Context, selected bool) {
 
 // batchBar is the row over the player bar while a playlist is being chosen:
 // how many are chosen, Select All, the three actions, and Cancel.
-func (a *app) batchBar(c *ui.Context) {
+func (a *app) batchBar(c *ui.Context, foreground float32) {
 	if !a.batch.on {
 		return
 	}
 	if a.batch.downloads {
 		if a.route.page == pageDownloads {
-			a.downloadBatchBar(c)
+			a.downloadBatchBar(c, foreground)
 		}
 		return
 	}
 	if a.songsBatchActive() {
-		a.songsBar(c, a.shownTracks, false)
+		a.songsBar(c, a.shownTracks, false, foreground)
 		return
 	}
 	if a.route.page != pagePlaylist {
@@ -366,17 +366,17 @@ func (a *app) batchBar(c *ui.Context) {
 	if pl == nil {
 		return
 	}
-	a.songsBar(c, pl.Tracks, pl.SpecialType == 5)
+	a.songsBar(c, pl.Tracks, pl.SpecialType == 5, foreground)
 }
 
 // songsBar is the row over the player bar while songs of tracks are being
 // chosen: how many are chosen, Select All, what to do with them, and
 // Cancel. Those of the liked songs are unliked, the others liked.
-func (a *app) songsBar(c *ui.Context, tracks []netease.Track, liked bool) {
+func (a *app) songsBar(c *ui.Context, tracks []netease.Track, liked bool, foreground float32) {
 	pal := a.pal
 	chosenN := len(a.chosenOf(tracks))
 	all := len(tracks) > 0 && chosenN == len(tracks)
-	bar := a.floatBar(c.Key("batch-bar"))
+	bar := a.floatBar(c.Key("batch-bar")).Opacity(foreground)
 	bar.Children(func() {
 		ui.Icon(c, iconCheck).Size(15, 15).TextColor(pal.accent)
 		ui.Textf(c, "已选 %d 首", chosenN).FontSize(12.5).FontWeight(600).TextColor(pal.text)
@@ -441,7 +441,7 @@ func (a *app) floatBar(c *ui.Context) ui.Element {
 	const h = 52
 	bar := ui.Row(c).Absolute().Left(glassBarSide).Right(glassBarSide).Bottom(playerBarHeight + 10).
 		Height(h).Gap(8).AlignItems(ui.Center)
-	if !a.settings.LiquidGlass {
+	if !a.settings.playerGlass() {
 		a.pane(bar, h/2, false)
 		return bar.PaddingX(14)
 	}
@@ -454,10 +454,10 @@ func (a *app) floatBar(c *ui.Context) ui.Element {
 
 // downloadBatchBar is the row over the player bar while downloaded songs
 // are chosen for deletion.
-func (a *app) downloadBatchBar(c *ui.Context) {
+func (a *app) downloadBatchBar(c *ui.Context, foreground float32) {
 	pal := a.pal
 	count := a.downloadBatchCount()
-	bar := a.floatBar(c.Key("batch-bar"))
+	bar := a.floatBar(c.Key("batch-bar")).Opacity(foreground)
 	bar.Children(func() {
 		ui.Icon(c, iconCheck).Size(15, 15).TextColor(pal.accent)
 		ui.Textf(c, "已选 %d 首", count).FontSize(12.5).FontWeight(600).TextColor(pal.text)

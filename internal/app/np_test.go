@@ -46,6 +46,97 @@ func TestNowPlayingClosesAsOneLayer(t *testing.T) {
 	}
 }
 
+// The sidebar must be out of view before lyrics appear over the shared
+// glass, and stay out until those lyrics have faded on the way back.
+func TestGlobalGlassFadesPageBehindLyrics(t *testing.T) {
+	a := newTestApp()
+	a.settings = defaultSettings()
+	a.settings.GlobalGlass = true
+	a.pl.Cue([]netease.Track{{ID: 1, Name: "宝船", Duration: 200000}})
+	tt := ui.NewTester(a.view, 1100, 700)
+	tt.SetDark(true)
+	tt.SetVibrancy(true)
+	tt.Frame()
+	tt.Advance(time.Second)
+	nav, ok := tt.Find("最近播放")
+	if !ok {
+		t.Fatal("sidebar did not appear")
+	}
+	visible := func() bool {
+		img := tt.Image()
+		s := float32(img.Bounds().Dx()) / 1100
+		for y := int(nav.Y * s); y < int((nav.Y+nav.H)*s); y++ {
+			for x := int(nav.X * s); x < int((nav.X+nav.W)*s); x++ {
+				r, g, b, _ := img.At(x, y).RGBA()
+				if r+g+b > 3*0x9000 {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	if !visible() {
+		t.Fatal("sidebar text should be drawn at rest")
+	}
+	checkTransition := func(open bool) {
+		t.Helper()
+		a.nowPlaying = open
+		tt.Frame()
+		for elapsed := time.Duration(0); elapsed < npSettle; elapsed += 16 * time.Millisecond {
+			tt.Advance(16 * time.Millisecond)
+			if a.npK > 0.55 && a.npK < 0.68 {
+				if visible() {
+					t.Fatalf("sidebar text still shows while lyrics are visible (opening: %v)", open)
+				}
+				return
+			}
+		}
+		t.Fatal("playback view did not animate through the handover")
+	}
+	checkTransition(true)
+	tt.Advance(time.Second)
+	checkTransition(false)
+	tt.Advance(time.Second)
+	if !visible() {
+		t.Fatal("sidebar text did not come back")
+	}
+}
+
+// Finishing the opening animation, or starting to close, must not suddenly
+// reveal or dim a second glass backdrop under the playback page.
+func TestGlobalGlassNowPlayingDoesNotFlash(t *testing.T) {
+	a := newTestApp()
+	a.settings = defaultSettings()
+	a.settings.GlobalGlass = true
+	a.pl.Cue([]netease.Track{{ID: 1, Name: "宝船", Duration: 200000}})
+	a.pl.SetLyrics(nil)
+	tt := ui.NewTester(a.view, 1100, 700)
+	tt.SetDark(true)
+	tt.SetVibrancy(true)
+	tt.Frame()
+	a.nowPlaying = true
+	tt.Frame()
+	tt.Advance(600 * time.Millisecond)
+	if a.npK != 1 {
+		t.Fatalf("expected playback view at full size, got %v", a.npK)
+	}
+	backdrop := func() uint8 {
+		img := tt.Image()
+		return img.RGBAAt(img.Bounds().Dx()*9/10, img.Bounds().Dy()*3/4).A
+	}
+	before := backdrop()
+	tt.Advance(80 * time.Millisecond)
+	after := backdrop()
+	if after != before {
+		t.Errorf("the backdrop jumped as opening settled: %d to %d", before, after)
+	}
+	a.nowPlaying = false
+	tt.Frame()
+	if first := backdrop(); first != after {
+		t.Errorf("the backdrop jumped on the first closing frame: %d to %d", after, first)
+	}
+}
+
 func TestQueueStaysAsATrackIsPlayed(t *testing.T) {
 	a := newTestApp()
 	var tracks []netease.Track

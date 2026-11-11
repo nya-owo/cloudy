@@ -213,16 +213,16 @@ func (a *app) albumRows(c *ui.Context, albums []netease.AlbumProfile) {
 		al := &albums[i]
 		selected := a.route.page == pageAlbum && a.route.id == al.ID && !a.nowPlaying
 		d := a.side()
-		b := ui.ButtonBase(c.Key(al.ID)).Height(d.row).PaddingX(8).Gap(10).Radius(8).AlignItems(ui.Center).Justify(ui.Start).FocusRing(false).Label(al.Name)
+		b := ui.ButtonBase(c.Key(al.ID)).Height(d.row).Radius(8).FocusRing(false).Label(al.Name)
 		if b.Hovered() && !selected {
 			b.Background(p.hover)
 		}
-		b.Children(func() {
-			if selected {
-				a.navPill(c)
-			}
+		a.navRowContent(c, b, selected, 8, func() {
 			a.cover(c, al.PicURL, 96, d.cover, d.coverRadius)
-			ui.Text(c, al.Name).FontSize(d.text).SingleLine().Shrink(1).MinWidth(0)
+			label := ui.Text(c, al.Name).FontSize(d.text).TextColor(p.text).SingleLine().Shrink(1).MinWidth(0)
+			if selected {
+				label.FontWeight(600)
+			}
 		})
 		a.contextMenu(b, false, func() [][]menuAction {
 			return [][]menuAction{{

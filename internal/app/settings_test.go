@@ -14,6 +14,42 @@ import (
 	"netease-music-mygo/internal/netease"
 )
 
+// Global glass takes effect only after confirmation, and can be turned off
+// directly. Cancelling the prompt keeps the previous setting.
+func TestGlobalGlassRequiresConfirmation(t *testing.T) {
+	a := newTestApp()
+	a.settings = defaultSettings()
+	a.settings.path = filepath.Join(t.TempDir(), "settings.json")
+	a.settingsView.open, a.settingsView.tab = true, settingsEffects
+	tt := ui.NewTester(a.view, 1000, 700)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt.Frame()
+	click := func(label string) {
+		t.Helper()
+		if err := tt.Click(label); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+	}
+	click("切换全局液态玻璃")
+	if !a.settingsView.confirmGlass || a.settings.GlobalGlass {
+		t.Fatal("enabling glass should wait for confirmation")
+	}
+	click("取消")
+	if a.settingsView.confirmGlass || a.settings.GlobalGlass || !a.settingsView.open {
+		t.Fatal("cancelling should leave settings open with global glass off")
+	}
+	click("切换全局液态玻璃")
+	click("确认开启")
+	if a.settingsView.confirmGlass || !a.settings.GlobalGlass || !loadSettingsFrom(a.settings.path).GlobalGlass {
+		t.Fatal("confirmation should apply and save global glass")
+	}
+	click("切换全局液态玻璃")
+	if a.settingsView.confirmGlass || a.settings.GlobalGlass || loadSettingsFrom(a.settings.path).GlobalGlass {
+		t.Fatal("disabling should apply and save directly")
+	}
+}
+
 // Switching categories keeps edited settings and each category's scroll position.
 func TestSettingsCategoryNavigation(t *testing.T) {
 	asked := make(chan struct{}, 1)
@@ -195,12 +231,13 @@ func TestPowerSaver(t *testing.T) {
 	a.settings = defaultSettings()
 	s := &a.settings
 	s.Fog, s.Smoke = true, false
+	s.GlobalGlass, s.SidebarGlass, s.MainGlass = true, true, false
 	a.setPowerSaver(true)
-	if s.LiquidGlass || s.BarSpin || s.NpLight || s.Fog || s.Smoke || !s.PowerSaver {
+	if s.panelGlass() || s.playerGlass() || s.sidebarGlass() || s.mainGlass() || s.BarSpin || s.NpLight || s.Fog || s.Smoke || !s.PowerSaver {
 		t.Fatal("the saver left an effect on")
 	}
 	a.setPowerSaver(false)
-	if !s.LiquidGlass || !s.BarSpin || !s.NpLight || !s.Fog || s.Smoke || s.PowerSaver {
+	if !s.LiquidGlass || !s.GlobalGlass || !s.SidebarGlass || s.MainGlass || !s.BarSpin || !s.NpLight || !s.Fog || s.Smoke || s.PowerSaver {
 		t.Fatalf("the saver did not put the effects back: %+v", s)
 	}
 	a.setPowerSaver(true)
@@ -318,5 +355,30 @@ func TestFeedbackMailClosed(t *testing.T) {
 	a.sendFeedback()
 	if a.feedback.sending {
 		t.Fatal("feedback went by mail while it is closed")
+	}
+}
+
+// Enabling any glass option exits the saver without restoring unrelated effects.
+func TestGlassOptionLeavesPowerSaver(t *testing.T) {
+	for _, which := range []string{"global", "sidebar", "main", "panels"} {
+		t.Run(which, func(t *testing.T) {
+			a := newTestApp()
+			a.settings = defaultSettings()
+			a.setPowerSaver(true)
+			switch which {
+			case "global":
+				a.settings.GlobalGlass = true
+			case "sidebar":
+				a.settings.SidebarGlass = true
+			case "main":
+				a.settings.MainGlass = true
+			case "panels":
+				a.settings.GlassPanels = true
+			}
+			a.leavePowerSaver()
+			if a.settings.PowerSaver || a.settings.SaverBefore != nil || a.settings.BarSpin {
+				t.Fatal("glass option did not leave the saver independently")
+			}
+		})
 	}
 }
