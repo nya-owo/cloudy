@@ -602,6 +602,15 @@ func scaleLabel(v float64) string {
 func (a *app) settingsLyricsPage(k *settingsKit) {
 	s := &a.settings
 	k.group("播放页歌词", func() {
+		k.row("透视歌词", "当前句在画面中部高亮，上下歌词沿圆弧滚动", func() {
+			k.toggle("lyric-perspective", "透视歌词", &s.LyricPerspective, false, nil)
+		})
+		k.sub("倾斜度", "0% 为直上直下，50% 为原来的圆弧幅度", s.LyricPerspective, func() {
+			a.settingSlider(k.c.Key("lyric-tilt"), "倾斜度", &s.LyricTilt, s.LyricPerspective, k.ink)
+		})
+		k.sub("回弹强度", "调节切换到下一句时的回弹幅度，0% 为平滑滚动", s.LyricPerspective, func() {
+			a.settingSlider(k.c.Key("lyric-bounce"), "回弹强度", &s.LyricBounce, s.LyricPerspective, k.ink)
+		})
 		k.row("歌词翻译", "在歌词下方显示翻译；播放栏的翻译按钮也能切换", func() {
 			k.toggle("lyric-trans", "歌词翻译", &s.LyricTrans, false, nil)
 		})

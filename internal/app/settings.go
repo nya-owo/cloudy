@@ -75,6 +75,11 @@ type settings struct {
 	Shortcuts map[string]string `json:"shortcuts,omitempty"`
 	// LyricScale is the size of lyrics, of their size as designed: 0 for 1.
 	LyricScale float64 `json:"lyricScale,omitempty"`
+	// LyricPerspective displays scrolling lyrics on an arc in Now Playing.
+	LyricPerspective bool `json:"lyricPerspective,omitempty"`
+	// Zero is meaningful for both sliders, so keep it when saving.
+	LyricTilt   float64 `json:"lyricTilt"`
+	LyricBounce float64 `json:"lyricBounce"`
 	// LyricShift is how many milliseconds a song's lyrics run early, by its
 	// ID, where they don't keep time with it.
 	LyricShift map[int64]int `json:"lyricShift,omitempty"`
@@ -193,7 +198,7 @@ type settings struct {
 }
 
 func defaultSettings() settings {
-	return settings{UpdateChecks: true, BarSpin: true, GlobalKeys: true, NotchActivity: true, Quality: "exhigh", Appearance: "system", LiquidGlass: true, NpLight: true, GlowLevel: 0.5, GlassClear: 0.6, GlassBend: 0.3, GlassPanels: true, Volume: 0.8, Normalize: true, AppIcon: "dock-and-menubar", CacheMB: 2048, Captions: true, LyricTrans: true, DeskWords: true}
+	return settings{UpdateChecks: true, BarSpin: true, GlobalKeys: true, NotchActivity: true, Quality: "exhigh", Appearance: "system", LiquidGlass: true, NpLight: true, GlowLevel: 0.5, GlassClear: 0.6, GlassBend: 0.3, GlassPanels: true, Volume: 0.8, Normalize: true, AppIcon: "dock-and-menubar", CacheMB: 2048, Captions: true, LyricTrans: true, LyricTilt: 0.5, LyricBounce: 0.5, DeskWords: true}
 }
 
 func settingsPath() (string, error) {

@@ -11,6 +11,43 @@ import (
 	"netease-music-mygo/internal/player"
 )
 
+// scrollEdgeFade changes the alpha of the scrolled content itself. Narrow
+// bands blend the layer on the GPU and CPU without drawing a colored veil.
+type scrollEdgeFade struct {
+	depth, top, bottom float32
+}
+
+func (scrollEdgeFade) EffectMargin() ui.Point { return ui.Point{} }
+
+func (f scrollEdgeFade) PaintEffect(p *ui.Painter, box ui.Rect, content *ui.Bitmap, inset ui.Point) {
+	scale := p.Scale()
+	draw := func(from, to, alpha float32) {
+		src := ui.Rect{X: inset.X, Y: inset.Y + from*scale, W: box.W * scale, H: (to - from) * scale}
+		dst := ui.Rect{X: box.X, Y: box.Y + from, W: box.W, H: to - from}
+		p.ImageRegion(content, src, dst, ui.ImageOptions{Tint: white.Alpha(alpha)})
+	}
+	edge := min(f.depth, box.H/4)
+	top, bottom := float32(0), box.H
+	if f.top > 0 {
+		top = edge
+	}
+	if f.bottom > 0 {
+		bottom -= edge
+	}
+	draw(top, bottom, 1)
+	const bands = 24
+	for i := range bands {
+		from, to := edge*float32(i)/bands, edge*float32(i+1)/bands
+		alpha := easeRange((from+to)/2, 0, edge)
+		if f.top > 0 {
+			draw(from, to, lerp(1, alpha, f.top))
+		}
+		if f.bottom > 0 {
+			draw(box.H-to, box.H-from, lerp(1, alpha, f.bottom))
+		}
+	}
+}
+
 // palette holds the app's colors, for the light and the dark appearance.
 type palette struct {
 	dark      bool
