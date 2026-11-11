@@ -919,11 +919,21 @@ func (a *app) settingsEffectsPage(k *settingsKit) {
 			}
 			k.toggle(key, label, stored, false, after)
 		}
+		// The cover's colors take the place of the accent chosen: said, in a
+		// toast, as either is turned on.
+		coverOn := func(on *bool) func() {
+			return func() {
+				a.leavePowerSaver()
+				if *on && a.chosenAccent() != "" {
+					a.toast = "已改用封面色背景，所选主题色将不再显示"
+				}
+			}
+		}
 		k.row("侧栏封面色背景", "透出当前歌曲封面的颜色，不使用实时折射", func() {
-			part("sidebar-glass", "侧栏封面色背景", &s.SidebarGlass, a.leavePowerSaver)
+			part("sidebar-glass", "侧栏封面色背景", &s.SidebarGlass, coverOn(&s.SidebarGlass))
 		})
 		k.row("主界面封面色背景", "与侧栏共享连续的封面色背景", func() {
-			part("main-glass", "主界面封面色背景", &s.MainGlass, a.leavePowerSaver)
+			part("main-glass", "主界面封面色背景", &s.MainGlass, coverOn(&s.MainGlass))
 		})
 		k.row("液态玻璃播放栏", "播放栏化作悬浮的玻璃胶囊，透出并折射其下的内容", func() {
 			part("liquid-glass", "液态玻璃播放栏", &s.LiquidGlass, a.leavePowerSaver)

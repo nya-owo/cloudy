@@ -481,7 +481,11 @@ func edgeShown(el ui.Element, under bool) float32 {
 // back to.
 func (a *app) pageTop(c *ui.Context, foreground float32) {
 	top, _ := a.insets(c)
-	if a.settings.playerGlass() {
+	if a.settings.mainGlass() {
+		// The fade lays the page's plain color over what scrolls under the
+		// top, which over the cover's colors shows as a pale band: none.
+		ui.Box(c.Key("top-drag")).Absolute().Top(0).Left(0).Right(0).Height(top).DragWindow()
+	} else if a.settings.playerGlass() {
 		edge := ui.Box(c.Key("top-edge")).Absolute().Top(0).Left(0).Right(0).Height(top + 24).PassThrough()
 		edge.Material(glass.ScrollEdge{Background: a.pal.bg})
 		edge.Opacity(edgeShown(edge, a.underTop))
