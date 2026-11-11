@@ -101,3 +101,113 @@ func TestGlassBarFrames(t *testing.T) {
 func TestBarGlassCompiles(t *testing.T) {
 	barGlassShader()
 }
+
+// The selection glass used to cover and dim the playlist label beneath it.
+func TestSidebarSelectionKeepsTextAboveGlass(t *testing.T) {
+	a := newTestApp()
+	a.settings.GlobalGlass = true
+	lists := []netease.Playlist{{ID: 7, Name: "收藏的歌曲"}}
+	a.route = route{page: pagePlaylist, id: lists[0].ID}
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.pal = paletteFor(c.Theme())
+		c.Root().Background(a.pal.bg)
+		ui.Column(c).Fill().Children(func() { a.playlistRows(c, lists, true) })
+	}, 220, 80)
+	tt.SetDark(true)
+	tt.Frame()
+	img := tt.Image()
+	scale := float32(img.Bounds().Dx()) / 220
+	peak := uint8(0)
+	for y := int(8 * scale); y < int(26*scale); y++ {
+		for x := int(42 * scale); x < int(150*scale); x++ {
+			peak = max(peak, img.RGBAAt(x, y).R)
+		}
+	}
+	if peak < 225 {
+		t.Fatalf("selected playlist text is dimmed by the glass (brightest red: %d)", peak)
+	}
+}
+
+// The main surface leaves room for the desktop only when its glass is on,
+// and a settled glass playback page leaves that room even without the main page.
+func TestGlobalGlassWindowCoverage(t *testing.T) {
+	a := newTestApp()
+	a.settings = defaultSettings()
+	a.settings.SidebarGlass, a.settings.MainGlass = false, false
+	a.pl.Cue([]netease.Track{{ID: 1, Name: "Echo of You", Duration: 125000}})
+	tt := ui.NewTester(a.view, 1100, 700)
+	tt.SetDark(true)
+	tt.SetVibrancy(true)
+	coverage := func(wantGlass bool) {
+		t.Helper()
+		tt.Frame()
+		tt.Advance(time.Second)
+		img := tt.Image()
+		alpha := img.RGBAAt(img.Bounds().Dx()*9/10, img.Bounds().Dy()*3/4).A
+		if alpha == 0 || (alpha < 255) != wantGlass {
+			t.Fatalf("main region alpha = %d, want glass = %v", alpha, wantGlass)
+		}
+	}
+	coverage(false)
+	a.settings.SidebarGlass = true
+	coverage(false)
+	a.settings.SidebarGlass, a.settings.MainGlass = false, true
+	coverage(true)
+	a.settings.MainGlass, a.settings.GlobalGlass = false, true
+	coverage(true)
+	// The two rounded panels used to leave thinner glass at the seam
+	// and in all four corners.
+	img := tt.Image()
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	seam := int(a.sideWidth(1100) * float32(w) / 1100)
+	for _, y := range []int{4, h - 5} {
+		want := img.RGBAAt(w/10, y).A
+		for _, x := range []int{4, seam - 4, seam + 4, w - 5} {
+			if got := img.RGBAAt(x, y).A; got != want {
+				t.Errorf("glass coverage at (%d, %d) = %d, want %d", x, y, got, want)
+			}
+		}
+	}
+	a.nowPlaying = true
+	coverage(true)
+}
+
+// Disabling either background must survive reopening even though both default on.
+func TestGlassBackgroundOffIsKept(t *testing.T) {
+	s := defaultSettings()
+	s.SidebarGlass, s.MainGlass = false, false
+	s.path = filepath.Join(t.TempDir(), "settings.json")
+	if err := s.save(); err != nil {
+		t.Fatal(err)
+	}
+	loaded := loadSettingsFrom(s.path)
+	if loaded.SidebarGlass || loaded.MainGlass {
+		t.Fatal("disabled cover backgrounds were enabled after reopening")
+	}
+}
+
+// The cached cover background must stop asking for frames once its tint has settled.
+func TestGlassBackgroundRests(t *testing.T) {
+	a := newTestApp()
+	a.settings = defaultSettings()
+	tr := netease.Track{ID: 1, Duration: 120000}
+	tr.Album.PicURL = "cached-cover"
+	a.pl.Cue([]netease.Track{tr})
+	a.art.art[netease.Sized(tr.Album.PicURL, 600)+"#backdrop"] = &artwork{
+		backdrop: ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 16, 16))),
+		tint:     ui.RGB(90, 120, 210),
+	}
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.pal = paletteFor(c.Theme())
+		a.glassPageBackdrop(ui.Box(c).Fill())
+	}, 220, 160)
+	tt.Frame()
+	tt.Advance(backdropFade + time.Second)
+	tt.Frame()
+	for range 10 {
+		tt.Advance(100 * time.Millisecond)
+		if tt.FramePending() {
+			t.Fatal("static cover background is still asking for frames")
+		}
+	}
+}

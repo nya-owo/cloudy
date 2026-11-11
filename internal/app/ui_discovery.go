@@ -3,7 +3,6 @@ package app
 import (
 	"time"
 
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"netease-music-mygo/internal/netease"
@@ -46,23 +45,18 @@ func (a *app) playlistFilterMenu(c *ui.Context) {
 			x = row.AnimateTo("pill-x", x, move)
 			width = row.AnimateTo("pill-width", width, move)
 		}
-		tint, line := ui.RGBA(255, 255, 255, 0.82), ui.RGBA(0, 0, 0, 0.08)
+		tint := ui.RGBA(255, 255, 255, 0.82)
 		if p.dark {
-			tint, line = ui.RGBA(255, 255, 255, 0.16), ui.RGBA(255, 255, 255, 0.18)
+			tint = ui.RGBA(255, 255, 255, 0.16)
 		}
-		// Paint the glass under the labels, so it cannot refract the selected word.
+		// Paint the flat selection tint under the labels.
 		row.Draw(func(painter *ui.Painter, r ui.Rect) {
 			if width <= 0 || height <= 0 {
 				return
 			}
 			pill := ui.Rect{X: r.X + x, Y: r.Y + (r.H-height)/2, W: width, H: height}
 			painter.Shadow(pill, height/2, 0, 2, 6, -2, p.cardShade)
-			if a.settings.GlassPanels {
-				glass.Paint(painter, pill, height/2, glass.Glass{Style: glass.Clear, Tint: tint})
-			} else {
-				painter.Fill(pill, tint, height/2)
-			}
-			painter.Stroke(pill, line, height/2, 0.5)
+			painter.Fill(pill, tint, height/2)
 		})
 		row.Children(func() {
 			for i, filter := range playlistFilters {

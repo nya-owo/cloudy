@@ -194,17 +194,17 @@ type app struct {
 	rowsRoute             route            // the page whose list last came in
 	rowsAt                time.Time        // when it started to
 	sideColor             ui.Color         // what the sidebar shows, as it eases
-	sideEdge              ui.Color         // what its list fades to, under its edges
 	flight                coverFlight      // a cover on its way to the page it opens
 	heldRoute             route            // the page opened from a card
 	heldURL               string           // and the cover the card gave it
 	playSpot              ui.Rect          // where the play button last built is
 	backdropCache         backdropCache    // the backdrop of Now Playing, as last painted
-	npArt                 *artwork         // the cover whose colors Now Playing shows
-	npCoverState          coverState       // the cover of Now Playing, as it is tilted and flicked
-	wallState             wallState        // the wall of the queue's covers, as it is dragged
-	quiet                 quietState       // the quiet parts of the song playing, for its hot comments
-	captions              captionState     // the episode playing's captions, and the model that writes them
+	windowMaterial        mygo.Vibrancy
+	npArt                 *artwork     // the cover whose colors Now Playing shows
+	npCoverState          coverState   // the cover of Now Playing, as it is tilted and flicked
+	wallState             wallState    // the wall of the queue's covers, as it is dragged
+	quiet                 quietState   // the quiet parts of the song playing, for its hot comments
+	captions              captionState // the episode playing's captions, and the model that writes them
 	sig                   playerSig
 	quitting              bool
 
@@ -332,6 +332,7 @@ func Run() error {
 		}
 		a.volume = a.settings.Volume
 		a.pl.SetVolume(a.volume)
+		a.windowMaterial = a.settings.mainWindowMaterial()
 		a.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:         mygo.App.Name(),
 			Width:         1180,
@@ -345,7 +346,7 @@ func Run() error {
 			// Inset from the corner, within the sidebar, as macOS 26's
 			// apps with a sidebar place them.
 			TrafficLightPosition: &mygo.Point{X: 20, Y: 20},
-			Vibrancy:             mygo.VibrancySidebar,
+			Vibrancy:             a.windowMaterial,
 			BackgroundColor:      "light-dark(#ffffff, #141416)",
 			Content:              ui.View(a.view),
 			// Started at login, as the listener asked: to the tray.

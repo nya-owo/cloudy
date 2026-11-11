@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"netease-music-mygo/internal/netease"
@@ -366,11 +365,7 @@ func (a *app) segmentedControl(c *ui.Context, selected *int, labels []string, ac
 			p.Shadow(pill, radius-inset, 0, 0.5, 1, 0, ui.RGBA(0, 0, 0, 0.2))
 			p.Shadow(pill, radius-inset, 0, 1, 3, 0, ui.RGBA(0, 0, 0, 0.06))
 		}
-		if a.settings.GlassPanels {
-			glass.Paint(p, pill, radius-inset, glass.Glass{Style: glass.Clear, Tint: capsule})
-		} else {
-			p.Fill(pill, capsule, radius-inset)
-		}
+		p.Fill(pill, capsule, radius-inset)
 	}).Children(func() {
 		for i, l := range labels {
 			seg := parts.Segment(i).Width(width).Height(height - 2*inset).Center().Radius(radius - inset)

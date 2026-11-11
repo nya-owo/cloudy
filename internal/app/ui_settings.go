@@ -79,6 +79,10 @@ func (a *app) changed() {
 		// The theme source reaches the app's loop, which a view built in a
 		// test has none of.
 		a.settings.applyAppearance()
+		if material := a.settings.mainWindowMaterial(); material != a.windowMaterial {
+			a.windowMaterial = material
+			a.win.SetVibrancy(material)
+		}
 	}
 	if a.notch != nil {
 		a.notch.setEnabled(a.settings.Notch)
@@ -110,6 +114,37 @@ func (a *app) settingsPanel(c *ui.Context) {
 			ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 				a.settingsSidebar(c)
 				a.settingsBody(c)
+			})
+		})
+	})
+}
+
+func (a *app) globalGlassDialog(c *ui.Context) {
+	sv := &a.settingsView
+	if !sv.open {
+		sv.confirmGlass = false
+	}
+	a.dialog(c, "confirm-global-glass", 0.25, &sv.confirmGlass, func(panel ui.Element) {
+		ink := a.inkOn(false)
+		panel.Width(410).TextColor(ink.text).Label("全局液态玻璃确认")
+		a.pane(panel, 26, false)
+		panel.Children(func() {
+			dialogHeader(c, ink, "开启全局液态玻璃？", "", func() { sv.confirmGlass = false })
+			ui.Row(c).PaddingX(28).Gap(8).AlignItems(ui.Start).Children(func() {
+				ui.Icon(c, iconWarn).Size(16, 16).Shrink(0).TextColor(warnColor)
+				ui.Text(c, "实时折射会增加性能开销，部分背景下文字可能略难读。").
+					FontSize(13).LineHeight(1.4).TextColor(ink.muted).Shrink(1).MinWidth(0)
+			})
+			dialogFooter(c, func() {
+				if settingButton(c.Key("cancel"), ink, "取消", nil, false, false).Clicked() {
+					sv.confirmGlass = false
+				}
+				if primaryButton(c.Key("confirm"), "确认开启", nil, a.pal, false).Clicked() {
+					sv.confirmGlass = false
+					a.settings.GlobalGlass = true
+					a.leavePowerSaver()
+					a.changed()
+				}
 			})
 		})
 	})
@@ -422,31 +457,40 @@ func (a *app) settingsBody(c *ui.Context) {
 	if k.query != "" {
 		key, scroll, label = "search", &a.settingsView.searchScroll, "搜索"
 	}
-	ui.Scroll(c.Key(key)).Label(label+"设置项").TrackScroll(scroll).Grow(1).Shrink(1).MinWidth(0).Padding(0, 30, 30, 18).Children(func() {
-		if k.query == "" {
-			ui.Column(c.Key(a.settingsView.tab)).Margin(-12, 0, 0, 0).Children(func() { a.settingsPage(k, a.settingsView.tab) })
-			return
-		}
-		found := false
-		for cat := settingsCategory(0); cat < settingsCategoryCount; cat++ {
-			if k.count(func() { a.settingsPage(k, cat) }) == 0 {
-				continue
+	viewport := ui.Box(c.Key("settings-viewport")).Grow(1).Shrink(1).MinWidth(0)
+	fade := easeRange(scroll.Y, 0, 24)
+	if fade > 0 || a.settings.GlobalGlass {
+		// Keep one scratch layer for the settings, while each category's
+		// scroll keeps its own input state and position.
+		viewport.Effect(scrollEdgeFade{depth: 44, top: fade})
+	}
+	viewport.Children(func() {
+		ui.Scroll(c.Key(key)).Label(label+"设置项").TrackScroll(scroll).Fill().Padding(0, 30, 30, 18).Children(func() {
+			if k.query == "" {
+				ui.Column(c.Key(a.settingsView.tab)).Margin(-12, 0, 0, 0).Children(func() { a.settingsPage(k, a.settingsView.tab) })
+				return
 			}
-			found = true
-			ui.Column(c.Key(cat)).Children(func() {
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Margin(16, 0, -6, 6).Children(func() {
-					ui.Icon(c, settingsCategories[cat].icon).Size(16, 16).TextColor(k.ink.muted)
-					ui.Text(c, settingsCategories[cat].label).FontSize(15).FontWeight(700)
+			found := false
+			for cat := settingsCategory(0); cat < settingsCategoryCount; cat++ {
+				if k.count(func() { a.settingsPage(k, cat) }) == 0 {
+					continue
+				}
+				found = true
+				ui.Column(c.Key(cat)).Children(func() {
+					ui.Row(c).Gap(8).AlignItems(ui.Center).Margin(16, 0, -6, 6).Children(func() {
+						ui.Icon(c, settingsCategories[cat].icon).Size(16, 16).TextColor(k.ink.muted)
+						ui.Text(c, settingsCategories[cat].label).FontSize(15).FontWeight(700)
+					})
+					a.settingsPage(k, cat)
 				})
-				a.settingsPage(k, cat)
-			})
-		}
-		if !found {
-			ui.Column(c).Padding(80, 0).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, iconSearch).Size(28, 28).TextColor(k.ink.faint)
-				ui.Text(c, "没有找到「"+strings.TrimSpace(a.settingsView.query)+"」相关的设置").FontSize(14).TextColor(k.ink.muted)
-			})
-		}
+			}
+			if !found {
+				ui.Column(c).Padding(80, 0).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Icon(c, iconSearch).Size(28, 28).TextColor(k.ink.faint)
+					ui.Text(c, "没有找到「"+strings.TrimSpace(a.settingsView.query)+"」相关的设置").FontSize(14).TextColor(k.ink.muted)
+				})
+			}
+		})
 	})
 }
 
@@ -855,12 +899,43 @@ func (a *app) settingsEffectsPage(k *settingsKit) {
 			}
 		})
 	})
-	k.group("播放栏", func() {
-		k.row("液态玻璃播放栏", "播放栏化作悬浮的玻璃胶囊，透出并折射其下的内容", func() {
-			effect("liquid-glass", "液态玻璃播放栏", &s.LiquidGlass)
+	k.group("液态玻璃", func() {
+		k.row("全局液态玻璃", "使用通透的封面色背景，悬浮播放栏、菜单和对话框采用折射玻璃", func() {
+			on := s.GlobalGlass
+			if ui.Switch(c.Key("global-glass"), &on).Label("切换全局液态玻璃").Changed() {
+				if on {
+					a.settingsView.confirmGlass = true
+				} else {
+					s.GlobalGlass = false
+					a.changed()
+				}
+			}
 		})
-		slider("玻璃透明度", "越高越能看清背后的内容，文字会更难读", &s.GlassClear, s.LiquidGlass)
-		slider("折射强度", "胶囊边缘弯折背后内容的程度", &s.GlassBend, s.LiquidGlass)
+		part := func(key, label string, stored *bool, after func()) {
+			if s.GlobalGlass {
+				on := true
+				k.toggle(key, label, &on, true, nil)
+				return
+			}
+			k.toggle(key, label, stored, false, after)
+		}
+		k.row("侧栏封面色背景", "透出当前歌曲封面的颜色，不使用实时折射", func() {
+			part("sidebar-glass", "侧栏封面色背景", &s.SidebarGlass, a.leavePowerSaver)
+		})
+		k.row("主界面封面色背景", "与侧栏共享连续的封面色背景", func() {
+			part("main-glass", "主界面封面色背景", &s.MainGlass, a.leavePowerSaver)
+		})
+		k.row("液态玻璃播放栏", "播放栏化作悬浮的玻璃胶囊，透出并折射其下的内容", func() {
+			part("liquid-glass", "液态玻璃播放栏", &s.LiquidGlass, a.leavePowerSaver)
+		})
+		k.row("界面玻璃", "菜单、弹窗和设置面板使用玻璃材质，内部卡片保持平面", func() {
+			part("glass-panels", "界面玻璃", &s.GlassPanels, a.leavePowerSaver)
+		})
+		refractive := s.playerGlass() || s.GlobalGlass
+		slider("玻璃透明度", "调节玻璃的通透程度", &s.GlassClear, refractive)
+		slider("折射强度", "调节玻璃边缘弯折应用内背景的程度", &s.GlassBend, refractive)
+	})
+	k.group("播放栏", func() {
 		k.row("封面旋转", "播放时胶囊里的封面像黑胶一样缓慢转动", func() {
 			effect("bar-spin", "播放栏封面旋转", &s.BarSpin)
 		})
@@ -878,9 +953,6 @@ func (a *app) settingsEffectsPage(k *settingsKit) {
 		})
 	})
 	k.group("界面", func() {
-		k.row("界面玻璃", "菜单、弹窗和设置使用玻璃材质；关闭后为纯色，显卡占用更低", func() {
-			k.toggle("glass-panels", "界面玻璃", &s.GlassPanels, false, nil)
-		})
 		k.row("界面动画", "精简时只保留淡入淡出", func() {
 			modes := []string{"", "lite", "off"}
 			i := 0

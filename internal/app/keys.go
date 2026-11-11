@@ -241,7 +241,7 @@ func (a *app) lyricTools(c *ui.Context, id int64, at ui.Rect) {
 	reveal(bar, a.npPointer).Children(func() {
 		group := func(key string, chips func()) {
 			capsule := ui.Row(c.Key(key)).Height(32).Padding(2).Radius(999).AlignItems(ui.Center)
-			capsule.Background(white.Alpha(0.04)).Border(1, white.Alpha(0.1))
+			capsule.Background(white.Alpha(0.04))
 			capsule.Children(chips)
 		}
 		fade := ui.Animation{Duration: 120 * time.Millisecond}

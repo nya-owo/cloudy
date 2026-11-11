@@ -33,9 +33,11 @@ func (a *app) pane(e ui.Element, radius float32, onDark bool) ui.Element {
 	e.Radius(radius).Shadow(0, 18, 44, -12, ui.RGBA(0, 0, 0, 0.45))
 	dark := onDark || a.pal.dark
 	switch {
-	case !a.settings.GlassPanels && dark:
+	case a.settings.GlobalGlass:
+		return e.Material(a.interfaceGlass(dark))
+	case !a.settings.panelGlass() && dark:
 		return e.Background(ui.Hex("#232327")).Border(0.5, white.Alpha(0.12))
-	case !a.settings.GlassPanels:
+	case !a.settings.panelGlass():
 		return e.Background(ui.Hex("#f6f6f8")).Border(0.5, ui.RGBA(0, 0, 0, 0.12))
 	case a.pal.dark:
 		return e.Material(glass.Glass{Tint: ui.RGBA(14, 14, 18, 0.62)}).Border(0.5, white.Alpha(0.14))

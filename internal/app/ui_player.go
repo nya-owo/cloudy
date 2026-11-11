@@ -117,9 +117,8 @@ func (a *app) scrubber(c *ui.Context, st *scrubState, track, fill ui.Color, heig
 		}
 		if st.lens && knob > 0.01 {
 			w, h := 30*knob, 18*knob
-			k := ui.Rect{X: head - w/2, Y: r.Y + (r.H-h)/2, W: w, H: h}
-			p.Shadow(k, h/2, 0, 1, 6, 0, ui.RGBA(0, 0, 0, 0.25))
-			glass.Paint(p, k, h/2, glass.Glass{Style: glass.Clear})
+			k := ui.Rect{X: head - w/2, Y: cy - h/2, W: w, H: h}
+			p.Fill(k, white, h/2)
 		} else if knob > 0.01 {
 			k := 12 * knob
 			p.Shadow(ui.Rect{X: head - k/2, Y: r.Y + (r.H-k)/2, W: k, H: k}, k/2, 0, 1, 3, 0, ui.RGBA(0, 0, 0, 0.3))
@@ -231,7 +230,7 @@ func (a *app) volumeButton(c *ui.Context, color ui.Color) {
 			AlignItems(ui.Center).Gap(8).Label("音量").TransformOrigin(0.5, 1)
 		a.paneMotion(panel)
 		// Of glass, there is no arrow: what shows through would stop at it.
-		if a.settings.GlassPanels {
+		if a.settings.panelGlass() {
 			ui.Textf(c, "%d%%", int(a.volume*100+0.5)).FontSize(11).FontWeight(500).FontFeatures("tnum").TextColor(a.pal.muted)
 			a.nativeVolumeSlider(c, pop)
 			return
@@ -446,7 +445,7 @@ const (
 // playerBar runs along the foot of the content: what plays, its controls
 // and its progress, and the volume. With LiquidGlass, it floats over the
 // page as a capsule of glass, which what scrolls under it bends through.
-func (a *app) playerBar(c *ui.Context) {
+func (a *app) playerBar(c *ui.Context, foreground float32) {
 	p := a.pal
 	pl := a.pl
 	tr := pl.Current()
@@ -455,7 +454,7 @@ func (a *app) playerBar(c *ui.Context) {
 		// Played, or gone: it says what it is again.
 		a.picked = pickedUp{}
 	}
-	liquid := a.settings.LiquidGlass
+	liquid := a.settings.playerGlass()
 	a.barScrub.lens = liquid
 	// Glass shows anything through: what is on it keeps its contrast by
 	// being stronger than over the plain page.
@@ -492,13 +491,14 @@ func (a *app) playerBar(c *ui.Context) {
 	a.barBox = bar.LayoutBounds()
 	if liquid {
 		bar.Left(glassBarSide).Right(glassBarSide).Bottom(glassBarFoot).Height(glassH).Padding(0, 20, 0, glassBarInset).
-			Radius(glassH/2).Shadow(0, 6, 24, -6, ui.RGBA(0, 0, 0, 0.3)).Material(barGlass{dark: p.dark, clear: float32(a.settings.GlassClear), bend: float32(a.settings.GlassBend)})
+			Radius(glassH/2).Shadow(0, 6, 24, -6, ui.RGBA(0, 0, 0, 0.3)).
+			Material(barGlass{dark: p.dark, clear: float32(a.settings.GlassClear), bend: float32(a.settings.GlassBend), translucent: a.settings.GlobalGlass})
 	} else {
 		bar.Left(0).Right(0).Bottom(0).Height(playerBarHeight).PaddingX(20)
 	}
 	bar.Children(func() {
 		// What plays.
-		ui.Row(c).Grow(1).Basis(0).MinWidth(150).Children(func() {
+		ui.Row(c).Grow(1).Basis(0).MinWidth(150).Opacity(foreground).Children(func() {
 			if tr == nil {
 				ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 					ui.Box(c).Size(48, 48).Radius(cover).Background(p.hover).Center().Children(func() {
@@ -565,7 +565,7 @@ func (a *app) playerBar(c *ui.Context) {
 		if !roomy {
 			middle = 240
 		}
-		ui.Column(c).Width(440).Shrink(1).MinWidth(middle).Gap(0).AlignItems(ui.Stretch).Children(func() {
+		ui.Column(c).Width(440).Shrink(1).MinWidth(middle).Gap(0).AlignItems(ui.Stretch).Opacity(foreground).Children(func() {
 			a.playFlies = a.lifted
 			a.transport(c, p.text, muted, p.accent, 18)
 			a.playFlies = nil
@@ -589,7 +589,7 @@ func (a *app) playerBar(c *ui.Context) {
 		})
 
 		// The floating windows, the volume, and the song's details.
-		ui.Row(c).Grow(1).Basis(0).MinWidth(controls).Justify(ui.End).AlignItems(ui.Center).Gap(4).Children(func() {
+		ui.Row(c).Grow(1).Basis(0).MinWidth(controls).Justify(ui.End).AlignItems(ui.Center).Gap(4).Opacity(foreground).Children(func() {
 			desk := muted
 			if a.settings.DeskLyrics {
 				desk = p.accent

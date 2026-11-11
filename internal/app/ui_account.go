@@ -490,16 +490,16 @@ func (a *app) playlistRows(c *ui.Context, lists []netease.Playlist, mine bool) {
 		pl := &lists[i]
 		selected := a.route.page == pagePlaylist && a.route.id == pl.ID && !a.nowPlaying
 		d := a.side()
-		b := ui.ButtonBase(c.Key(pl.ID)).Height(d.row).PaddingX(8).Gap(10).Radius(8).AlignItems(ui.Center).Justify(ui.Start).FocusRing(false).Label(pl.Name)
+		b := ui.ButtonBase(c.Key(pl.ID)).Height(d.row).Radius(8).FocusRing(false).Label(pl.Name)
 		if b.Hovered() && !selected {
 			b.Background(p.hover)
 		}
-		b.Children(func() {
-			if selected {
-				a.navPill(c)
-			}
+		a.navRowContent(c, b, selected, 8, func() {
 			a.cover(c, pl.Cover(), 96, d.cover, d.coverRadius)
-			ui.Text(c, pl.Name).FontSize(d.text).SingleLine().Shrink(1).MinWidth(0)
+			label := ui.Text(c, pl.Name).FontSize(d.text).TextColor(p.text).SingleLine().Shrink(1).MinWidth(0)
+			if selected {
+				label.FontWeight(600)
+			}
 		})
 		switch {
 		case mine && pl.SpecialType != 5:

@@ -67,4 +67,5 @@ type settingsView struct {
 	dirty        bool       // a slider moved, and the settings are not kept yet
 	accentDraft  accentPick // the color well open, and the color it shows
 	fontPick     fontPicker // the dialog of the system's fonts
+	confirmGlass bool       // asking before enabling global liquid glass
 }

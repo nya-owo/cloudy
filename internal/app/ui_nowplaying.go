@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"netease-music-mygo/internal/lyrics"
@@ -17,6 +16,15 @@ var white = ui.RGB(255, 255, 255)
 
 // npSettle is how long Now Playing takes to come or go, its spring at rest.
 const npSettle = 640 * time.Millisecond
+
+// npTextStart is when the playback controls and lyrics begin to appear.
+const npTextStart = 0.45
+
+// npPageBackground fades out what the transparent view still shows through
+// before the page is unmounted, and fades it back after it is built again.
+func npPageBackground(progress float32) float32 {
+	return 1 - easeRange(progress, 0.52, 1)
+}
 
 // How Now Playing opens and closes. They end at rest rather than settling as
 // a spring does, for what flies to land with nothing left of its speed, and
@@ -50,6 +58,19 @@ func (a *app) npState(c *ui.Context) (open, settled bool) {
 	return open, now.Sub(a.npChangedAt) >= npSettle
 }
 
+// npProgress is shared by the playback view and the page beneath it, so
+// their handover stays in sync even if the animation reverses midway.
+func (a *app) npProgress(root ui.Element, open bool) float32 {
+	to, move := float32(0), npClosing
+	if open {
+		to, move = 1, npOpening
+	}
+	if a.motion == motionOff || a.pl.Current() == nil {
+		return to
+	}
+	return clamp01(root.AnimateTo("now-playing", to, move))
+}
+
 // nowPlayingLayer holds Now Playing over the whole window, growing out of
 // the player bar as it opens and folding back into it as it closes: the
 // bar's shape opens up to the window, showing the view through it, the view
@@ -57,25 +78,16 @@ func (a *app) npState(c *ui.Context) (open, settled bool) {
 // moves its box, not a transform, as a clip moved by one is drawn on the CPU.
 func (a *app) nowPlayingLayer(c *ui.Context, open, settled bool) {
 	w, h := c.Size()
-	if a.npK > 0.002 {
+	k := a.npK
+	dim := 0.4 * k
+	if a.settings.GlobalGlass {
+		dim *= npPageBackground(k)
+	}
+	if dim > 0.001 {
 		ui.Box(c.Key("now-playing-dim")).Absolute().Top(0).Left(0).Right(0).Bottom(0).PassThrough().
-			Background(ui.RGB(0, 0, 0)).Opacity(0.4 * a.npK)
+			Background(ui.RGB(0, 0, 0)).Opacity(dim)
 	}
 	layer := ui.Box(c.Key("now-playing-layer")).Absolute()
-	to := float32(0)
-	if open {
-		to = 1
-	}
-	// An empty Animation is the default one, not none.
-	k := to
-	if a.motion != motionOff {
-		move := npOpening
-		if !open {
-			move = npClosing
-		}
-		k = clamp01(layer.AnimateTo("open", to, move))
-	}
-	a.npK = k
 	if !open && settled || a.pl.Current() == nil {
 		// Closed: nothing to paint or click.
 		a.backdropCache = backdropCache{}
@@ -125,6 +137,11 @@ func (a *app) nowPlayingView(c *ui.Context) {
 
 	root := ui.Box(c.Key("now-playing")).Absolute().Top(0).Left(0).Right(0).Bottom(0).
 		Background(ui.Hex("#0b0b0d")).TextColor(white)
+	artOpacity := float32(1)
+	if a.settings.GlobalGlass && c.Vibrancy() {
+		root.Background(ui.Transparent)
+		artOpacity = 0.53
+	}
 	// The pointer is over the view whenever it is in the window.
 	pointerIn := root.Hovered()
 	a.npPointer = pointerIn
@@ -135,12 +152,13 @@ func (a *app) nowPlayingView(c *ui.Context) {
 		root.Opacity(easeRange(k, 0, 0.3))
 	}
 	root.Children(func() {
-		a.backdrop(c, shown, tint)
+		a.backdrop(c, shown, tint, artOpacity)
+
 		// Over the backdrop, which is positioned too: positioned elements
 		// paint over those in the flow.
 		body := ui.Column(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() { a.nowPlayingBody(c, tr, art, accent, w, h, pointerIn) })
 		if k < 1 {
-			body.Opacity(easeRange(k, 0.45, 0.95))
+			body.Opacity(easeRange(k, npTextStart, 0.95))
 		}
 	})
 }
@@ -389,18 +407,13 @@ func (a *app) npTabs() []npTab {
 func (a *app) paneTabs(c *ui.Context, row ui.Element) {
 	move := ui.Animation{Spring: ui.SpringOptions{Duration: 340 * time.Millisecond, Bounce: 0.12}}
 	x, w, h := row.AnimateTo("pill-x", a.npPill.X, move), row.AnimateTo("pill-w", a.npPill.W, move), a.npPill.H
-	frosted := a.settings.GlassPanels
 	// Drawn on the row, under the tabs: over them, it would bend their words.
 	row.Draw(func(p *ui.Painter, r ui.Rect) {
 		if w <= 0 {
 			return
 		}
 		pill := ui.Rect{X: r.X + x, Y: r.Y + (r.H-h)/2, W: w, H: h}
-		if frosted {
-			glass.Paint(p, pill, h/2, glass.Glass{Style: glass.Clear, Tint: white.Alpha(0.14)})
-		} else {
-			p.Fill(pill, white.Alpha(0.14), h/2)
-		}
+		p.Fill(pill, white.Alpha(0.14), h/2)
 	})
 	for _, t := range a.npTabs() {
 		label := t.label

@@ -35,7 +35,10 @@ type settings struct {
 	Font string `json:"font,omitempty"`
 	// LiquidGlass floats the player bar as a capsule of glass. Off is kept
 	// too, without omitempty: left out, it would load as the default.
-	LiquidGlass bool `json:"liquidGlass"`
+	LiquidGlass  bool `json:"liquidGlass"`
+	GlobalGlass  bool `json:"globalGlass,omitempty"`
+	SidebarGlass bool `json:"sidebarGlass"`
+	MainGlass    bool `json:"mainGlass"`
 	// NpLight gives the line sung, the progress bar and the volume a faint
 	// glow in Now Playing (ui_light.go). As for LiquidGlass, off is kept too.
 	NpLight bool `json:"npLight"`
@@ -198,7 +201,22 @@ type settings struct {
 }
 
 func defaultSettings() settings {
-	return settings{UpdateChecks: true, BarSpin: true, GlobalKeys: true, NotchActivity: true, Quality: "exhigh", Appearance: "system", LiquidGlass: true, NpLight: true, GlowLevel: 0.5, GlassClear: 0.6, GlassBend: 0.3, GlassPanels: true, Volume: 0.8, Normalize: true, AppIcon: "dock-and-menubar", CacheMB: 2048, Captions: true, LyricTrans: true, LyricTilt: 0.5, LyricBounce: 0.5, DeskWords: true}
+	return settings{UpdateChecks: true, BarSpin: true, GlobalKeys: true, NotchActivity: true, Quality: "exhigh", Appearance: "system", LiquidGlass: true, SidebarGlass: true, MainGlass: true, NpLight: true, GlowLevel: 0.5, GlassClear: 0.6, GlassBend: 0.3, GlassPanels: true, Volume: 0.8, Normalize: true, AppIcon: "dock-and-menubar", CacheMB: 2048, Captions: true, LyricTrans: true, LyricTilt: 0.5, LyricBounce: 0.5, DeskWords: true}
+}
+
+func (s settings) playerGlass() bool  { return !s.PowerSaver && (s.GlobalGlass || s.LiquidGlass) }
+func (s settings) panelGlass() bool   { return !s.PowerSaver && (s.GlobalGlass || s.GlassPanels) }
+func (s settings) sidebarGlass() bool { return !s.PowerSaver && (s.GlobalGlass || s.SidebarGlass) }
+func (s settings) mainGlass() bool    { return !s.PowerSaver && (s.GlobalGlass || s.MainGlass) }
+
+func (s settings) mainWindowMaterial() mygo.Vibrancy {
+	if s.PowerSaver {
+		return mygo.VibrancyNone
+	}
+	if s.sidebarGlass() || s.mainGlass() {
+		return mygo.VibrancyGlassClear
+	}
+	return mygo.VibrancySidebar
 }
 
 func settingsPath() (string, error) {

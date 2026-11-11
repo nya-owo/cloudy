@@ -58,8 +58,16 @@ func (a *app) view(c *ui.Context) {
 		c.OnShortcut(0, ui.KeySpace, a.pl.TogglePlay)
 	}
 	npOpen, npSettled := a.npState(c)
+	a.npK = a.npProgress(root, npOpen)
+	foreground := float32(1)
+	background := float32(1)
+	if a.settings.GlobalGlass {
+		// Give the two layers of text separate halves of the transition.
+		foreground = 1 - easeRange(a.npK, 0, npTextStart)
+		background = npPageBackground(a.npK)
+	}
 	root.Children(func() {
-		page := ui.Row(c).Fill().AlignItems(ui.Stretch)
+		page := ui.Row(c).Fill().AlignItems(ui.Stretch).Opacity(background)
 		page.Children(func() {
 			if npOpen && npSettled {
 				// Covered by Now Playing: not built, which would cost each
@@ -68,13 +76,21 @@ func (a *app) view(c *ui.Context) {
 				// trackList), so it shows again as it was.
 				return
 			}
+			sideGlass, mainGlass := a.settings.sidebarGlass(), a.settings.mainGlass()
+			sharedGlass := sideGlass && mainGlass
+			if mainGlass || sideGlass {
+				a.glassPageBackdrop(page)
+			}
 			winW, _ := c.Size()
 			side := ui.Column(c).Width(a.sideWidth(winW))
 			switch {
-			case !c.Vibrancy():
+			case sideGlass:
+				if !sharedGlass {
+					side.Background(p.bg.Alpha(0.16))
+				}
+			case a.settings.PowerSaver || !c.Vibrancy() || mainGlass:
 				a.sideColor = side.AnimateColor("tint", a.sidebarColor(), ui.Animation{Duration: 700 * time.Millisecond})
 				side.Background(a.sideColor)
-				a.sideEdge = a.sideColor
 			case a.chosenAccent() != "":
 				// The window's material shows through the sidebar, which has
 				// no color of its own: lay the color over it, thin enough
@@ -84,18 +100,24 @@ func (a *app) view(c *ui.Context) {
 				side.Background(a.sideColor.Alpha(0.55))
 			}
 			side.Children(func() {
-				a.sidebar(c)
+				a.sidebar(c, foreground)
 				a.sidebarResizer(c, winW)
 			})
 			// Keyed, so that a popover of the sidebar opening or closing
 			// keeps what the page and its bars hold, their edges' fades.
-			ui.Box(c.Key("main")).Grow(1).Background(p.bg).Children(func() {
-				a.content(c)
+			main := ui.Box(c.Key("main")).Grow(1)
+			if mainGlass && !sharedGlass {
+				main.Background(p.bg.Alpha(0.16))
+			} else if !mainGlass {
+				main.Background(p.bg)
+			}
+			main.Children(func() {
+				a.content(c, foreground)
 				// The bars float over the page, which scrolls under them:
 				// positioned, they paint over it.
-				a.pageTop(c)
-				a.playerBar(c)
-				a.batchBar(c)
+				a.pageTop(c, foreground)
+				a.playerBar(c, foreground)
+				a.batchBar(c, foreground)
 			})
 		})
 		a.coverFlightView(c)
@@ -108,6 +130,7 @@ func (a *app) view(c *ui.Context) {
 	a.deletePlaylistDialog(c)
 	a.downloadDeleteDialog(c)
 	a.settingsPanel(c)
+	a.globalGlassDialog(c)
 	a.accentDialog(c)
 	a.updateDialog(c)
 	a.shortcutEditorDialog(c)
@@ -122,6 +145,36 @@ func (a *app) view(c *ui.Context) {
 		a.toast = ""
 	}
 	a.syncWindows()
+}
+
+// glassPageBackdrop shares the cached, blurred cover across both panes.
+// Only the image and a tint are painted; no full-window refraction runs.
+func (a *app) glassPageBackdrop(page ui.Element) {
+	var art *artwork
+	url := ""
+	if tr := a.pl.Current(); tr != nil {
+		url = tr.Album.PicURL
+	}
+	if url != "" {
+		if cover := a.art.get(netease.Sized(url, 600), true); cover != nil && !cover.failed {
+			art = cover
+		}
+	}
+	tint := a.pal.bg
+	if art != nil && !art.failed {
+		tint = art.tint
+	} else if a.chosenAccent() != "" {
+		tint = a.pal.accent
+	}
+	tint = page.AnimateColor("glass-tint", tint, ui.Animation{Duration: backdropFade})
+	bmp := backdrop(art)
+	in := artIn(page, bmp)
+	page.Draw(func(p *ui.Painter, r ui.Rect) {
+		p.FillGradient(r, ui.LinearGradient{Angle: 180, From: tint.Alpha(0.28), To: tint.Alpha(0.04)}, 0)
+		if bmp != nil {
+			p.ImageRegion(bmp, ui.Rect{}, r, ui.ImageOptions{Tint: white.Alpha(0.32 * in)})
+		}
+	})
 }
 
 func (a *app) shortcuts(c *ui.Context) {
@@ -257,7 +310,7 @@ func (a *app) goForward() {
 	a.pageDir = 1
 }
 
-func (a *app) sidebar(c *ui.Context) {
+func (a *app) sidebar(c *ui.Context, foreground float32) {
 	// Under the window buttons where they sit over the sidebar, as the
 	// traffic lights do; elsewhere, as close to the top as to the sides.
 	top := float32(14)
@@ -266,12 +319,18 @@ func (a *app) sidebar(c *ui.Context) {
 	}
 	// Where nothing in it takes the press, the sidebar moves the window, as
 	// the title bar it reaches up into would.
-	ui.Column(c).Fill().Padding(top, 14, 14, 14).Gap(4).DragWindow().Children(func() {
+	ui.Column(c).Fill().Padding(top, 14, 14, 14).Gap(4).DragWindow().Opacity(foreground).Children(func() {
 		a.searchField(c)
 
 		nav := ui.Box(c.Key("nav-box")).Grow(1).MinHeight(0).Margin(0, -6)
 		nav.Children(func() {
-			ui.Scroll(c.Key("nav")).TrackScroll(&a.navScroll).Fill().Padding(0, 6).Gap(4).Children(func() {
+			nav := ui.Scroll(c.Key("nav")).TrackScroll(&a.navScroll).Fill().Padding(0, 6).Gap(4)
+			top := easeRange(a.navScroll.Y, 0, 16)
+			bottom := easeRange(a.navScroll.MaxY-a.navScroll.Y, 0, 16)
+			if top > 0 || bottom > 0 {
+				nav.Effect(scrollEdgeFade{depth: 34, top: top, bottom: bottom})
+			}
+			nav.Children(func() {
 				a.navItem(c, iconHome, "为你推荐", route{page: pageHome})
 				a.navItem(c, iconRadio, "私人 FM", route{page: pageFM})
 				a.navItem(c, iconCharts, "排行榜", route{page: pageCharts})
@@ -288,12 +347,11 @@ func (a *app) sidebar(c *ui.Context) {
 				a.myPlaylists(c, "收藏的歌单", a.saved, false, &a.savedCollapsed)
 				a.myAlbumsSection(c)
 			})
-			a.scrollFades(c, &a.navScroll)
 		})
 
 		// What plays, as a card at the foot of the sidebar, over who listens.
 		// Not with the bar of glass, which says as much, and more, beside it.
-		if tr := a.pl.Current(); tr != nil && !a.settings.LiquidGlass {
+		if tr := a.pl.Current(); tr != nil && !a.settings.playerGlass() {
 			a.sidebarNowPlaying(c, tr)
 		}
 		a.accountRow(c)
@@ -304,7 +362,7 @@ func (a *app) navItem(c *ui.Context, icon *ui.SVG, label string, r route) {
 	p := a.pal
 	selected := a.route.page == r.page && !a.nowPlaying
 	d := a.side()
-	b := ui.ButtonBase(c.Key(label)).Height(d.row).PaddingX(10).Gap(10).Radius(8).AlignItems(ui.Center).Justify(ui.Start).FocusRing(false)
+	b := ui.ButtonBase(c.Key(label)).Height(d.row).Radius(8).FocusRing(false)
 	bg := ui.Transparent
 	if b.Hovered() && !selected {
 		bg = p.hover
@@ -314,10 +372,7 @@ func (a *app) navItem(c *ui.Context, icon *ui.SVG, label string, r route) {
 	if selected {
 		color = p.accent
 	}
-	b.Children(func() {
-		if selected {
-			a.navPill(c)
-		}
+	a.navRowContent(c, b, selected, 10, func() {
 		ui.Icon(c, icon).Size(d.icon, d.icon).TextColor(color)
 		ui.Text(c, label).FontSize(d.navText).FontWeight(500).TextColor(p.text)
 	})
@@ -424,11 +479,11 @@ func edgeShown(el ui.Element, under bool) float32 {
 // fading away from it, as the soft one does, with no line across the window:
 // it drags the window, and holds the back button once there is a page to go
 // back to.
-func (a *app) pageTop(c *ui.Context) {
+func (a *app) pageTop(c *ui.Context, foreground float32) {
 	top, _ := a.insets(c)
-	if a.settings.LiquidGlass {
-		edge := ui.Box(c.Key("top-edge")).Absolute().Top(0).Left(0).Right(0).Height(top + 24).PassThrough().
-			Material(glass.ScrollEdge{Background: a.pal.bg})
+	if a.settings.playerGlass() {
+		edge := ui.Box(c.Key("top-edge")).Absolute().Top(0).Left(0).Right(0).Height(top + 24).PassThrough()
+		edge.Material(glass.ScrollEdge{Background: a.pal.bg})
 		edge.Opacity(edgeShown(edge, a.underTop))
 		ui.Box(c.Key("top-drag")).Absolute().Top(0).Left(0).Right(0).Height(top).DragWindow()
 	} else {
@@ -437,7 +492,7 @@ func (a *app) pageTop(c *ui.Context) {
 		edge.Opacity(edgeShown(edge, a.underTop))
 	}
 	if len(a.history) > 0 || len(a.forward) > 0 {
-		ui.Row(c).Absolute().Top(0).Left(20).Height(topBar(c)).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Absolute().Top(0).Left(20).Height(topBar(c)).AlignItems(ui.Center).Opacity(foreground).Children(func() {
 			back := iconButton(c.Key("back"), iconBack, 18, a.pal.muted, "返回").Disabled(len(a.history) == 0)
 			if len(a.history) == 0 {
 				back.Opacity(0.35)
@@ -453,7 +508,7 @@ func (a *app) pageTop(c *ui.Context) {
 	}
 }
 
-func (a *app) content(c *ui.Context) {
+func (a *app) content(c *ui.Context, foreground float32) {
 	// A new page starts at its top. Not as it is opened: a control in a
 	// list, as a page's tabs in its header, opens it as the list builds.
 	if a.scrolled != a.route {
@@ -466,9 +521,9 @@ func (a *app) content(c *ui.Context) {
 	// Far away, unless its start is built, as it isn't scrolled out of view.
 	a.headGone = 1 << 20
 	// Keyed by its route, the page before leaves as this one comes.
-	page := ui.Box(c.Key(a.route)).Absolute().Top(0).Left(0).Right(0).Bottom(0)
+	page := ui.Box(c.Key(a.route)).Absolute().Top(0).Left(0).Right(0).Bottom(0).Opacity(foreground)
 	a.pageMotion(page)
-	if url := a.pageArt(); url != "" {
+	if url := a.pageArt(); url != "" && !a.settings.mainGlass() {
 		a.pageAura(page, url)
 	}
 	page.Children(func() {

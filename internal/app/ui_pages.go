@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"netease-music-mygo/internal/netease"
@@ -201,11 +200,7 @@ func (a *app) coverPlayButton(c *ui.Context, shown bool, play func()) {
 	b := ui.ButtonBase(c.Key("play")).Absolute().Bottom(10).Right(10).Size(38, 38).Radius(999).Center().
 		TextColor(ui.RGB(255, 255, 255)).Label("播放").FocusRing(false).
 		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.3))
-	if a.settings.GlassPanels {
-		b.Material(glass.Glass{Tint: a.pal.accent.Alpha(0.72)})
-	} else {
-		b.Background(a.pal.accent)
-	}
+	b.Background(a.pal.accent)
 	pose := ui.Pose{Fade: 1, Scale: 0.8, Y: 6}
 	if shown || b.Hovered() {
 		pose = ui.Pose{Scale: 1}
