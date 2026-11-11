@@ -205,9 +205,16 @@ func (a *app) nowPlayingBody(c *ui.Context, tr *netease.Track, art *artwork, acc
 		}
 
 		side := float32(math.Min(float64(w)*0.36, 440))
-		// The cover leaves room above it for the tabs, starting as far
-		// under them as the wall's song does.
-		coverSize := min(side, h-436)
+		// The column is in the middle of the room under the strip, and the
+		// cover leaves room above it for the tabs, and as much under the
+		// column: as small as it takes for what goes under it (a radio's
+		// chip too) to fit, never up under the tabs.
+		rest := a.npRest
+		if rest <= 0 {
+			rest = npRestGuess
+		}
+		room := h - topBar(c) - npRowFoot
+		coverSize := max(min(side, room-rest-2*(npTabsHeight+npTabsGap)), npCoverLeast)
 		// The column is as wide as the cover, for the cover, what plays
 		// and the tabs over it to start at one edge, but wide enough for
 		// the controls.
@@ -215,7 +222,7 @@ func (a *app) nowPlayingBody(c *ui.Context, tr *netease.Track, art *artwork, acc
 		padX := npSideX(w)
 		tabs := npTabsRow(c, w)
 		reveal(tabs, pointerIn).Children(func() { a.paneTabs(c, tabs) })
-		row := ui.Row(c.Key("np-row")).Grow(1).Padding(0, padX, 44, padX).Gap(72).AlignItems(ui.Stretch)
+		row := ui.Row(c.Key("np-row")).Grow(1).Padding(0, padX, npRowFoot, padX).Gap(72).AlignItems(ui.Stretch)
 		row.Children(func() {
 			var coverTop float32
 			var volume ui.Element
@@ -267,6 +274,15 @@ func (a *app) nowPlayingBody(c *ui.Context, tr *netease.Track, art *artwork, acc
 				volume = ui.Row(c.Key("np-volume")).Justify(ui.Center).Children(func() {
 					a.volumeSlider(c, white.Alpha(0.7), white.Alpha(0.18), 180)
 				})
+				// How tall what is under the cover came out, for the cover's
+				// size in the next frame.
+				end := ui.Box(c.Key("np-end")).Height(0).LayoutBounds().Y
+				if cv := a.npSpot.cover; coverTop > 0 && end > coverTop && cv.H > 0 {
+					if r := end - coverTop - cv.H; math.Abs(float64(r-a.npRest)) > 0.5 {
+						a.npRest = r
+						c.AnimationFrame()
+					}
+				}
 			})
 			tools := false
 
@@ -325,6 +341,13 @@ func npSideX(w float32) float32 {
 // npTabsHeight is how tall the row of Now Playing's tabs is, for what is
 // under it to start below it.
 const npTabsHeight = 28
+
+const (
+	npTabsGap    = 16  // between the tabs and the cover under them, at least
+	npRowFoot    = 44  // under the cover's column, for the lyrics' tools
+	npRestGuess  = 270 // what goes under the cover, before it is laid out
+	npCoverLeast = 96  // the cover's least size, in the shortest window
+)
 
 // npTabsRow is the row of Now Playing's tabs, in the same place for every
 // pane, so that they stay put going from one to another: at the top, level
@@ -655,8 +678,9 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 			foot()
 		}
 	})
-	// Bring the line sung to a third of the way down, once it changed.
-	if cur != a.lyricAt {
+	// Bring the line sung to a third of the way down, once it changed:
+	// not while the listener looks through the lines.
+	if cur != a.lyricAt && !a.lyricGlide.holding(c, scroll) {
 		box := scroll.Bounds()
 		target := float32(0)
 		if active.Valid() {
@@ -695,6 +719,35 @@ type lyricGlide struct {
 	target  float32
 	pending bool
 	set     float32 // the offset it set
+	// When the listener last scrolled the lines: they stay where they
+	// were taken for a while (lyricHold), to pick a line from.
+	took time.Time
+}
+
+// lyricHold is how long the lines stay where the listener scrolled them
+// before following the song again; lyricHoldOver, while the pointer
+// stays over them.
+const (
+	lyricHold     = 4 * time.Second
+	lyricHoldOver = 10 * time.Second
+)
+
+// holding reports whether the lines stay where the listener scrolled
+// them, rather than following the song.
+func (g *lyricGlide) holding(c *ui.Context, scroll ui.Element) bool {
+	if g.took.IsZero() {
+		return false
+	}
+	hold := lyricHold
+	if scroll.Hovered() {
+		hold = lyricHoldOver
+	}
+	if left := hold - c.Now().Sub(g.took); left > 0 {
+		c.After(left + 20*time.Millisecond)
+		return true
+	}
+	g.took = time.Time{}
+	return false
 }
 
 // lyricOmega is the spring's ω: a line or two away, it comes within half a
@@ -726,18 +779,21 @@ func (g *lyricGlide) to(c *ui.Context, s *ui.ScrollState, target float32) {
 
 // step returns the lag of the lines in this frame, and asks for the next
 // while there is one. The listener scrolling stops the glide where it
-// shows.
+// shows, and holds the lines there a while.
 func (g *lyricGlide) step(c *ui.Context, s *ui.ScrollState) float32 {
 	if g.pending {
 		s.Y, g.set, g.pending = g.target, g.target, false
 	}
-	if !g.on {
-		return 0
-	}
 	lag, v := g.at(c.Now())
 	if s.Y != g.set {
 		// The listener took over: the offset takes what showed.
-		s.Y, g.on = max(0, min(s.Y+float32(lag), s.MaxY)), false
+		if g.on {
+			s.Y, g.on = max(0, min(s.Y+float32(lag), s.MaxY)), false
+		}
+		g.set, g.took = s.Y, c.Now()
+		return 0
+	}
+	if !g.on {
 		return 0
 	}
 	if math.Abs(lag) < 0.5 && math.Abs(v) < 20 {

@@ -544,16 +544,10 @@ func (a *app) dailyPage(c *ui.Context) {
 				ui.Text(c, fmt.Sprintf("%d 首 · %s", len(songs), a.dailyBlurb())).FontSize(13).TextColor(p.muted)
 				ui.Row(c).Gap(10).Margin(8, 0, 0, 0).Children(func() {
 					if pillButton(c.Key("play"), iconPlay, "播放全部", p.accent, p.onAccent).Clicked() {
-						if a.pl.Shuffle() {
-							a.pl.ToggleShuffle()
-						}
-						a.pl.PlayQueue(songs, firstPlayable(songs))
+						a.playList(songs, false)
 					}
 					if pillButton(c.Key("shuffle"), iconShuffle, "随机播放", p.hover.Over(p.bg), p.text).Clicked() {
-						if !a.pl.Shuffle() {
-							a.pl.ToggleShuffle()
-						}
-						a.pl.PlayQueue(songs, firstPlayable(songs))
+						a.playList(songs, true)
 					}
 					a.batchEntry(c)
 				})

@@ -118,8 +118,14 @@ func (a *app) view(c *ui.Context) {
 	a.uploadQueueDialog(c)
 	a.paneToasts(c)
 	if a.toast != "" {
-		c.Toast(a.toast)
-		a.toast = ""
+		if a.toastAs != "" {
+			// What it says replaces what the last of its kind said, in
+			// its place, rather than stacking over it.
+			c.AddToast(ui.Toast{ID: a.toastAs, Title: a.toast})
+		} else {
+			c.Toast(a.toast)
+		}
+		a.toast, a.toastAs = "", ""
 	}
 	a.syncWindows()
 }
@@ -596,6 +602,13 @@ func (a *app) loadPlaylist(id int64, thenPlay bool) {
 			a.playlistAnswered(gen, id, pl, err, thenPlay)
 		})
 	}()
+}
+
+// say shows msg as a toast saying the state of what, a switch turned or a
+// mode chosen: turned again, the next toast takes the place of the last
+// one about it, rather than stacking over it.
+func (a *app) say(what, msg string) {
+	a.toast, a.toastAs = msg, "state:"+what
 }
 
 func firstPlayable(tracks []netease.Track) int {

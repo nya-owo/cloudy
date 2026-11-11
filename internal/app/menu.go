@@ -62,8 +62,7 @@ func (a *app) setMenu() {
 			mygo.Separator(),
 			{Label: "喜欢/取消喜欢", Accelerator: "CmdOrCtrl+D", Click: run(a.likeCurrent)},
 			mygo.Separator(),
-			{Label: "随机播放", Click: run(func() { a.pl.ToggleShuffle() })},
-			{Label: "切换循环模式", Click: run(func() { a.pl.CycleRepeat() })},
+			{Label: "切换播放模式", Click: run(func() { a.say("mode", a.pl.CycleMode().Name()) })},
 			mygo.Separator(),
 			{Label: "正在播放", Accelerator: "CmdOrCtrl+L", Click: run(func() {
 				a.showMain()

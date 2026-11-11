@@ -14,9 +14,9 @@ func (a *app) toggleLyricTrans() {
 	a.settings.LyricTrans = !a.settings.LyricTrans
 	a.changed()
 	if a.settings.LyricTrans {
-		a.toast = "已显示歌词翻译"
+		a.say("lyric-trans", "已显示歌词翻译")
 	} else {
-		a.toast = "已隐藏歌词翻译"
+		a.say("lyric-trans", "已隐藏歌词翻译")
 	}
 	a.redraw()
 }
@@ -84,7 +84,7 @@ func (a *app) speedButton(c *ui.Context) {
 			}
 		}
 		a.setPodcastSpeed(next)
-		a.toast = "播放速度 " + speedLabel(next)
+		a.say("speed", "播放速度 "+speedLabel(next))
 	}
 }
 

@@ -17,11 +17,26 @@ func (a *app) downloadsPage(c *ui.Context) {
 		a.centered(c, a.dl.err, func() { a.loadDownloads(true) })
 		return
 	}
+	if scanning, _, _ := a.scanningDownloads(); scanning && len(tracks) == 0 {
+		a.centered(c, a.scanText(c), nil)
+		return
+	}
 	if len(tracks) == 0 && a.dl.queue.running == nil && len(a.dl.queue.waiting) == 0 {
 		a.downloadsEmpty(c)
 		return
 	}
 	a.toolRows(c, tracks, true, a.downloadsHeader)
+}
+
+// scanText says how far the folder's reading has come, and asks for the
+// frame that says the next.
+func (a *app) scanText(c *ui.Context) string {
+	_, done, all := a.scanningDownloads()
+	c.After(300 * time.Millisecond)
+	if all == 0 {
+		return "正在读取文件夹…"
+	}
+	return fmt.Sprintf("正在读取文件夹 %d/%d", done, all)
 }
 
 // downloadArtURL is the cover of the newest song saved, or of the one
@@ -65,6 +80,9 @@ func (a *app) downloadsHeader(c *ui.Context) {
 	meta := "保存在本机"
 	if len(a.dl.items) > 0 {
 		meta = fmt.Sprintf("保存在本机 · %d 首 · %s · %s", len(a.dl.items), longTime(total), sizeText(a.downloadBytes()))
+	}
+	if scanning, _, _ := a.scanningDownloads(); scanning {
+		meta += " · " + a.scanText(c)
 	}
 	head := ui.Row(c).Gap(28).AlignItems(ui.End).Padding(0, 0, 26, 0)
 	head.Children(func() {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -138,50 +139,121 @@ func (a *app) loadDownloads(scan bool) {
 		items = nil
 	}
 	if scan || broken || missing {
-		items, err = a.scanDownloadFolder(dir, items)
-		if err != nil {
-			a.dl.err = "无法读取下载文件夹"
-		}
-	} else {
-		items = existingDownloads(items)
+		a.scanDownloadsLater(dir, items)
+		return
 	}
+	items = existingDownloads(items)
 	sortDownloads(items)
 	a.dl.items = items
 	a.dl.loaded = true
 	a.fixDownloads()
-	if scan || broken || missing {
+}
+
+// scanDownloadsLater reads the folder away from the window, which shows
+// what the index knew meanwhile, and how far the reading has come: a
+// folder of thousands of songs, NetEase's own, takes a minute.
+func (a *app) scanDownloadsLater(dir string, indexed []download.Item) {
+	a.dl.scanGen++
+	gen := a.dl.scanGen
+	known := existingDownloads(slices.Clone(indexed))
+	sortDownloads(known)
+	a.dl.items, a.dl.loaded = known, true
+	count := &scanCount{}
+	a.dl.scanned = count
+	artDir := a.dl.artDir
+	run := func() ([]download.Item, error) {
+		return scanDownloadFolder(dir, indexed, artDir, func(n, all int) {
+			count.all.Store(int64(all))
+			count.done.Store(int64(n))
+		})
+	}
+	finish := func(items []download.Item, err error) {
+		if gen != a.dl.scanGen {
+			return // another folder, or another scan, since
+		}
+		a.dl.scanning = 0
+		if err != nil {
+			a.dl.err = "无法读取下载文件夹"
+		}
+		// What finished downloading while the folder was read stays.
+		have := make(map[string]bool, len(items))
+		for _, it := range items {
+			have[downloadPathKey(it.Path)] = true
+		}
+		for _, it := range a.dl.items {
+			if !have[downloadPathKey(it.Path)] && pathWithin(dir, it.Path) {
+				items = append(items, it)
+			}
+		}
+		sortDownloads(items)
+		a.dl.items = items
+		a.fixDownloads()
 		if err := a.saveDownloads(); err != nil {
 			a.dl.err = "无法保存下载记录"
 		}
 	}
+	a.dl.scanning = gen
+	if a.win == nil {
+		// No window to come back to (tests): at once.
+		finish(run())
+		return
+	}
+	go func() {
+		items, err := run()
+		a.post(func() { finish(items, err) })
+	}()
+}
+
+// scanningDownloads reports whether the folder is being read, and how many
+// of how many songs are.
+func (a *app) scanningDownloads() (bool, int, int) {
+	if a.dl.scanning == 0 || a.dl.scanning != a.dl.scanGen || a.dl.scanned == nil {
+		return false, 0, 0
+	}
+	return true, int(a.dl.scanned.done.Load()), int(a.dl.scanned.all.Load())
 }
 
 // scanDownloadFolder reads the songs in dir, taking the details of those the
-// index knows and reading the rest from their tags or names.
-func (a *app) scanDownloadFolder(dir string, indexed []download.Item) ([]download.Item, error) {
+// index knows and reading the rest from their tags or names, one file at a
+// time, its cover kept in artDir. It runs away from the window: it touches
+// nothing of the app's. progress hears how many of how many it has read.
+func scanDownloadFolder(dir string, indexed []download.Item, artDir string, progress func(done, all int)) ([]download.Item, error) {
 	byPath := make(map[string]download.Item, len(indexed))
 	for _, it := range indexed {
 		byPath[downloadPathKey(it.Path)] = it
 	}
-	songs, err := local.Scan(dir)
+	paths, err := local.Paths(dir)
 	if err != nil {
-		return existingDownloads(indexed), err
+		return existingDownloads(slices.Clone(indexed)), err
 	}
-	out := make([]download.Item, 0, len(songs)+len(indexed))
-	seen := make(map[string]bool, len(songs))
-	for _, s := range songs {
-		key := downloadPathKey(s.Path)
-		seen[key] = true
-		it, ok := byPath[key]
-		if !ok {
-			it = download.Item{Track: a.downloadFileTrack(s), Path: s.Path}
-			// Downloaded by Cloudy, it says which song it is.
-			it.Tagged = s.NeteaseID > 0
-		} else {
-			it.Path = s.Path
-			it.Track = downloadDetails(it.Track, s)
+	out := make([]download.Item, 0, len(paths)+len(indexed))
+	seen := make(map[string]bool, len(paths))
+	for n, path := range paths {
+		if progress != nil && n%16 == 0 {
+			progress(n, len(paths))
 		}
-		if info, err := os.Stat(s.Path); err == nil {
+		key := downloadPathKey(path)
+		it, ok := byPath[key]
+		if ok && downloadComplete(it.Track) {
+			// The index says all there is: the file need not be read.
+			seen[key] = true
+			it.Path = path
+		} else {
+			s, err := local.Read(path)
+			if err != nil {
+				continue
+			}
+			seen[key] = true
+			if !ok {
+				it = download.Item{Track: downloadFileTrack(*s, artDir), Path: path}
+				// Downloaded by Cloudy, it says which song it is.
+				it.Tagged = s.NeteaseID > 0
+			} else {
+				it.Path = path
+				it.Track = downloadDetails(it.Track, *s)
+			}
+		}
+		if info, err := os.Stat(path); err == nil {
 			if it.Size == 0 {
 				it.Size = info.Size()
 			}
@@ -190,6 +262,9 @@ func (a *app) scanDownloadFolder(dir string, indexed []download.Item) ([]downloa
 			}
 		}
 		out = append(out, it)
+	}
+	if progress != nil {
+		progress(len(paths), len(paths))
 	}
 	// A file the scanner could not read still belongs to the listener if
 	// the index knows it: keep it listed, so playback can report the fault.
@@ -203,6 +278,12 @@ func (a *app) scanDownloadFolder(dir string, indexed []download.Item) ([]downloa
 		}
 	}
 	return out, nil
+}
+
+// downloadComplete reports whether an index entry has all downloadDetails
+// would fill from the file.
+func downloadComplete(tr netease.Track) bool {
+	return tr.Name != "" && len(tr.Artists) > 0 && tr.Album.Name != "" && tr.Duration > 0
 }
 
 // downloadDetails fills what an index entry left empty from the file's tags.
@@ -444,6 +525,11 @@ func folderRoot(dir string) bool {
 // downloadFileTrack turns a song put in the downloads folder by hand into
 // one the player queues, with the tags its file carries.
 func (a *app) downloadFileTrack(s local.Song) netease.Track {
+	return downloadFileTrack(s, a.dl.artDir)
+}
+
+// downloadFileTrack is the song a file is, its cover kept in artDir.
+func downloadFileTrack(s local.Song, artDir string) netease.Track {
 	tr := netease.Track{
 		ID:        downloadFileID(s.Path),
 		Name:      s.Title,
@@ -466,7 +552,7 @@ func (a *app) downloadFileTrack(s local.Song) netease.Track {
 	if tr.Album.Name == "" {
 		tr.Album.Name = "未知专辑"
 	}
-	if cover := a.downloadCover(s); cover != "" {
+	if cover := downloadCover(s, artDir); cover != "" {
 		tr.Album.PicURL = cover
 	}
 	return tr
@@ -482,11 +568,14 @@ func downloadFileID(path string) int64 {
 
 // downloadCover keeps a song's embedded cover as a file, so that the cover
 // cache and the system's now playing read it as they do any other.
-func (a *app) downloadCover(s local.Song) string {
+func (a *app) downloadCover(s local.Song) string { return downloadCover(s, a.dl.artDir) }
+
+// downloadCover keeps s's embedded cover in dir, or the cache's folder for
+// them when dir is empty, and returns its path.
+func downloadCover(s local.Song, dir string) string {
 	if len(s.Picture) == 0 {
 		return ""
 	}
-	dir := a.dl.artDir
 	if dir == "" {
 		cache, err := mygo.App.Path(mygo.PathCache)
 		if err != nil {

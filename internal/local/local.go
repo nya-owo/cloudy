@@ -37,6 +37,25 @@ type Song struct {
 // Scan returns the songs in dir, and those below it, in the order of their
 // paths. Files it cannot read are left out rather than stopping it.
 func Scan(dir string) ([]Song, error) {
+	paths, err := Paths(dir)
+	if err != nil {
+		return nil, err
+	}
+	songs := make([]Song, 0, len(paths))
+	for _, path := range paths {
+		s, err := Read(path)
+		if err != nil {
+			continue
+		}
+		songs = append(songs, *s)
+	}
+	return songs, nil
+}
+
+// Paths returns the paths of the songs in dir, and those below it, in
+// order, without reading them: Read reads each, one at a time, for a large
+// folder's covers not to be all in memory at once.
+func Paths(dir string) ([]string, error) {
 	var paths []string
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -60,15 +79,7 @@ func Scan(dir string) ([]Song, error) {
 	sort.Slice(paths, func(i, j int) bool {
 		return strings.ToLower(paths[i]) < strings.ToLower(paths[j])
 	})
-	songs := make([]Song, 0, len(paths))
-	for _, path := range paths {
-		s, err := Read(path)
-		if err != nil {
-			continue
-		}
-		songs = append(songs, *s)
-	}
-	return songs, nil
+	return paths, nil
 }
 
 // Read returns the song at path, MP3 or FLAC, with the fallbacks its name

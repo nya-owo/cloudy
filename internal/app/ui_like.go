@@ -99,11 +99,11 @@ func (a *app) likeCurrent() {
 	case a.profile == nil:
 		return // asked to sign in
 	case !a.isLiked(tr):
-		a.toast = "已取消喜欢"
+		a.say("like", "已取消喜欢")
 	case tr.ProgramID != 0:
-		a.toast = "已喜欢这期节目"
+		a.say("like", "已喜欢这期节目")
 	default:
-		a.toast = "已添加到我喜欢的音乐"
+		a.say("like", "已添加到我喜欢的音乐")
 	}
 }
 

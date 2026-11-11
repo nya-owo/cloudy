@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/egoist/mygo"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -26,7 +27,14 @@ type downloadState struct {
 	pathDraft string // the folder path being typed in the settings
 	view      queueWindow
 	deletion  downloadDelete
+	// The folder being read: scanning is the scan's number while it runs,
+	// scanGen the last begun; scanned says how far it has read.
+	scanning, scanGen int
+	scanned           *scanCount
 }
+
+// scanCount is how many of how many songs a scan has read, as it reads.
+type scanCount struct{ done, all atomic.Int64 }
 
 // uploadState is the songs going up to the cloud drive, as downloads come
 // down.

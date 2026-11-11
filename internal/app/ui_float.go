@@ -355,7 +355,7 @@ func (a *app) deskTools(c *ui.Context, look deskLook, shown bool) {
 				next := (style + 1) % len(deskStyles)
 				s.DeskStyle = deskStyles[next].id
 				a.changed()
-				a.toast = "桌面歌词：" + deskStyles[next].label
+				a.say("desk-style", "桌面歌词："+deskStyles[next].label)
 			}, func() {
 				ring := white.Alpha(0.35)
 				switch {

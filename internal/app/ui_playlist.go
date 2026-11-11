@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"netease-music-mygo/internal/netease"
+	"netease-music-mygo/internal/player"
 )
 
 // plView is how a list of songs is looked at: what it is searched for and how
@@ -149,10 +151,31 @@ func longTime(d time.Duration) string {
 
 // playList plays tracks from the first that can, shuffled or not.
 func (a *app) playList(tracks []netease.Track, shuffled bool) {
-	if a.pl.Shuffle() != shuffled {
+	if shuffled {
+		// Shuffled, from any song that plays: not always the first.
+		a.pl.SetMode(player.ModeShuffle)
+		a.pl.PlayQueue(tracks, randomPlayable(tracks))
+		return
+	}
+	if a.pl.Shuffle() {
 		a.pl.ToggleShuffle()
 	}
 	a.pl.PlayQueue(tracks, firstPlayable(tracks))
+}
+
+// randomPlayable returns where a song that plays is in tracks, picked at
+// random, or 0 when none does.
+func randomPlayable(tracks []netease.Track) int {
+	var ok []int
+	for i := range tracks {
+		if tracks[i].Playable() {
+			ok = append(ok, i)
+		}
+	}
+	if len(ok) == 0 {
+		return 0
+	}
+	return ok[rand.IntN(len(ok))]
 }
 
 // pageAura fills the top of a page with a cover, blurred, fading

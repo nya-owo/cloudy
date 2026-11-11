@@ -1057,13 +1057,17 @@ func (p *Player) Restore(s Session) {
 	}
 	p.queue, p.order = s.Queue, s.Order
 	p.shuffle, p.repeat = s.Shuffle, s.Repeat%3
+	p.normalizeMode()
 	p.loadSkipping(s.At, 0, false, time.Duration(s.Position)*time.Millisecond, 1)
 }
 
 // finish keeps a broken stream from looking like a song played to its end.
 func (p *Player) finish(s *checkedStream) {
 	err := s.Err()
-	if err == nil && p.out.Duration()-p.out.Position() > 2*time.Second {
+	if err == nil && p.out.Duration()-p.out.Position() > 2*time.Second && !(p.cloudSong() && s.whole()) {
+		// Short of its length: cut off. But a cloud drive's song that all
+		// came in is as long as its file, which is often shorter than the
+		// song NetEase matched it to, whose length its details give.
 		err = errors.New("歌曲音频不完整，请重新加载")
 	}
 	if err != nil {
@@ -1093,4 +1097,10 @@ func (p *Player) finish(s *checkedStream) {
 		return
 	}
 	p.ended()
+}
+
+// cloudSong reports whether the track playing is from the listener's cloud
+// drive.
+func (p *Player) cloudSong() bool {
+	return p.track != nil && p.track.Privilege != nil && p.track.Privilege.Cs
 }

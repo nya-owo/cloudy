@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -261,10 +262,7 @@ func detailPrivileges(songs []Track) {
 	for i := range songs {
 		ids[i] = songs[i].ID
 	}
-	details, err := SongDetails(ids)
-	if err != nil {
-		return
-	}
+	details, _ := SongDetails(ids) // as many as came
 	var privileges []Privilege
 	for _, d := range details {
 		if d.Privilege != nil {
@@ -326,17 +324,36 @@ func PlaylistDetail(id int64) (*Playlist, error) {
 	p := &res.Playlist
 	withPrivileges(p.Tracks, res.Privileges)
 	// Its privileges mark VIP songs as taken down that a subscriber may
-	// play, as Stan's: the songs' details say right.
-	detailPrivileges(p.Tracks)
-	// Long playlists list only their first tracks in full: the rest by id.
+	// play, as Stan's: the songs' details say right. Long playlists list
+	// only their first tracks in full, the rest by id: one round of
+	// details, its batches side by side, does both.
+	ids := make([]int64, len(p.Tracks))
+	for i := range p.Tracks {
+		ids[i] = p.Tracks[i].ID
+	}
 	if len(p.Tracks) < len(p.TrackIDs) {
-		var ids []int64
 		for _, t := range p.TrackIDs[len(p.Tracks):min(len(p.TrackIDs), playlistTrackLimit)] {
 			ids = append(ids, t.ID)
 		}
-		more, err := SongDetails(ids)
-		if err == nil {
-			p.Tracks = append(p.Tracks, more...)
+	}
+	details, _ := SongDetails(ids)
+	var privileges []Privilege
+	for _, d := range details {
+		if d.Privilege != nil {
+			privileges = append(privileges, *d.Privilege)
+		}
+	}
+	withPrivileges(p.Tracks, privileges)
+	// Those that came of the rest, as many as did: a batch that failed
+	// leaves its songs out, not all of them.
+	listed := make(map[int64]bool, len(p.Tracks))
+	for _, t := range p.Tracks {
+		listed[t.ID] = true
+	}
+	for _, d := range details {
+		if !listed[d.ID] {
+			listed[d.ID] = true
+			p.Tracks = append(p.Tracks, d)
 		}
 	}
 	return p, nil
@@ -344,32 +361,62 @@ func PlaylistDetail(id int64) (*Playlist, error) {
 
 // SongDetails returns the tracks of ids, in their order. It goes through
 // the eapi: the web API's privileges call some VIP songs taken down for
-// subscribers, whom the eapi streams them to.
+// subscribers, whom the eapi streams them to. Batches go a few at a time;
+// one that fails leaves its songs out of those returned, with its error.
 func SongDetails(ids []int64) ([]Track, error) {
-	var out []Track
+	var batches [][]int64
 	for len(ids) > 0 {
-		batch := ids[:min(len(ids), 400)]
+		batch := ids[:min(len(ids), songDetailBatch)]
 		ids = ids[len(batch):]
-		c := make([]map[string]int64, len(batch))
-		for i, id := range batch {
-			c[i] = map[string]int64{"id": id}
-		}
-		b, _ := json.Marshal(c)
-		var res struct {
-			Code       int         `json:"code"`
-			Songs      []Track     `json:"songs"`
-			Privileges []Privilege `json:"privileges"`
-		}
-		if err := eapiPost("/api/v3/song/detail", map[string]any{"c": string(b)}, &res); err != nil {
-			return out, err
-		}
-		if res.Code != 200 {
-			return out, fmt.Errorf("netease: song detail: code %d", res.Code)
-		}
-		withPrivileges(res.Songs, res.Privileges)
-		out = append(out, res.Songs...)
+		batches = append(batches, batch)
 	}
-	return out, nil
+	got := make([][]Track, len(batches))
+	errs := make([]error, len(batches))
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, songDetailsAtOnce)
+	for i, batch := range batches {
+		wg.Add(1)
+		slots <- struct{}{}
+		go func() {
+			defer func() { <-slots; wg.Done() }()
+			got[i], errs[i] = songDetailBatchOf(batch)
+		}()
+	}
+	wg.Wait()
+	var out []Track
+	for i := range batches {
+		out = append(out, got[i]...)
+	}
+	return out, errors.Join(errs...)
+}
+
+// songDetailBatch is how many songs one request of details asks for, and
+// songDetailsAtOnce how many such requests go at once.
+const (
+	songDetailBatch   = 400
+	songDetailsAtOnce = 4
+)
+
+// songDetailBatchOf returns the details of one batch of ids.
+func songDetailBatchOf(batch []int64) ([]Track, error) {
+	c := make([]map[string]int64, len(batch))
+	for i, id := range batch {
+		c[i] = map[string]int64{"id": id}
+	}
+	b, _ := json.Marshal(c)
+	var res struct {
+		Code       int         `json:"code"`
+		Songs      []Track     `json:"songs"`
+		Privileges []Privilege `json:"privileges"`
+	}
+	if err := eapiPost("/api/v3/song/detail", map[string]any{"c": string(b)}, &res); err != nil {
+		return nil, err
+	}
+	if res.Code != 200 {
+		return nil, fmt.Errorf("netease: song detail: code %d", res.Code)
+	}
+	withPrivileges(res.Songs, res.Privileges)
+	return res.Songs, nil
 }
 
 // ArtistProfile is who an artist is, as their page shows them, with the

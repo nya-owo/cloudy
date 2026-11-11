@@ -20,6 +20,7 @@ var (
 
 	recommendedPodcasts = netease.RecommendedPodcasts
 	hotPodcasts         = netease.HotPodcasts
+	createdPodcasts     = netease.CreatedPodcasts
 )
 
 // programsPage is how many of a podcast's episodes load at a time.
@@ -164,10 +165,10 @@ func (a *app) toggleSubscribe(d *podcastData) {
 				a.toast = "操作失败，请稍后再试"
 			case sub:
 				tab.subscribed(pod)
-				a.toast = "已订阅"
+				a.say("subscribe", "已订阅")
 			default:
 				tab.unsubscribed(pod.ID)
-				a.toast = "已取消订阅"
+				a.say("subscribe", "已取消订阅")
 			}
 		})
 	}()
@@ -318,6 +319,7 @@ func (a *app) programPane(c *ui.Context, tr *netease.Track) {
 // subscribes to, NetEase's picks, and the most popular, as far as they have
 // loaded.
 type podcastTab struct {
+	mine    []netease.Podcast // those the listener made
 	subs    []netease.Podcast // the latest subscribed first
 	picks   []netease.Podcast
 	hot     []netease.Podcast
@@ -334,10 +336,15 @@ func (a *app) loadPodcastTab() {
 	}
 	t.loading, t.err = true, ""
 	signedIn := a.profile != nil
+	var uid int64
+	if signedIn {
+		uid = a.profile.UserID
+	}
 	go func() {
-		var subs []netease.Podcast
+		var subs, mine []netease.Podcast
 		if signedIn {
 			subs, _ = subscribedPodcasts()
+			mine, _ = createdPodcasts(uid)
 		}
 		picks, err1 := recommendedPodcasts()
 		hot, more, err2 := hotPodcasts(programsPage, 0)
@@ -347,7 +354,7 @@ func (a *app) loadPodcastTab() {
 				t.err = "无法连接网易云音乐，请检查网络"
 				return
 			}
-			t.subs, t.picks = subs, picks
+			t.subs, t.picks, t.mine = subs, picks, mine
 			t.addHot(hot)
 			t.hotPage = paged{loaded: true, more: more && len(hot) > 0}
 			if err2 != nil {
@@ -442,6 +449,7 @@ func (a *app) podcastsPage(c *ui.Context) {
 				}
 			})
 		}
+		list("我创建的", t.mine)
 		list("我的订阅", t.subs)
 		list("精选播客", t.picks)
 		list("热门播客", t.hot)

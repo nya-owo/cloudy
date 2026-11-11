@@ -208,12 +208,9 @@ func (a *app) volumeButton(c *ui.Context, color ui.Color) {
 	h := &a.volumeHover
 	now := c.Now()
 	if b.Clicked() {
-		// Opened by the pointer, a click keeps it; else it opens or closes.
-		if a.volumeOpen && h.byHover {
-			h.byHover = false
-		} else {
-			a.volumeOpen, h.byHover = !a.volumeOpen, false
-		}
+		// A click mutes, and another brings the volume back; the slider
+		// opens under the pointer.
+		a.toggleMute()
 	}
 	over := b.Hovered()
 	if over && !a.volumeOpen {
@@ -362,8 +359,10 @@ func (a *app) muteButton(c *ui.Context, color ui.Color) {
 func (a *app) toggleMute() {
 	if a.volume > 0 {
 		a.mutedFrom, a.volume = a.volume, 0
+	} else if a.mutedFrom > 0 {
+		a.volume = a.mutedFrom
 	} else {
-		a.volume = max(a.mutedFrom, 0.5)
+		a.volume = 0.5
 	}
 	a.pl.SetVolume(a.volume)
 }
@@ -396,16 +395,18 @@ func (a *app) volumeSlider(c *ui.Context, color, track ui.Color, width float32) 
 	})
 }
 
-// transport is the row of controls: shuffle, previous, play, next, repeat.
+// transport is the row of controls: the play mode, previous, play, next.
 func (a *app) transport(c *ui.Context, color, dim, on ui.Color, size float32) {
 	pl := a.pl
 	ui.Row(c).Gap(size * 0.5).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-		shuffle := dim
-		if pl.Shuffle() {
-			shuffle = on
+		// One button goes through the modes, lit but in order.
+		mode := pl.Mode()
+		tint := on
+		if mode == player.ModeOrder {
+			tint = dim
 		}
-		if iconButton(c.Key("shuffle"), iconShuffle, size*0.62, shuffle, "随机播放").Clicked() {
-			pl.ToggleShuffle()
+		if iconButton(c.Key("mode"), modeIcon(mode), size*0.62, tint, mode.Name()).Clicked() {
+			a.say("mode", pl.CycleMode().Name())
 		}
 		if iconButton(c.Key("prev"), iconPrev, size*0.85, color, "上一首").Clicked() {
 			pl.Prev()
@@ -421,17 +422,22 @@ func (a *app) transport(c *ui.Context, color, dim, on ui.Color, size float32) {
 		if iconButton(c.Key("next"), iconNext, size*0.85, color, "下一首").Clicked() {
 			pl.Next()
 		}
-		repeat, ricon := dim, iconRepeat
-		switch pl.Repeat() {
-		case player.RepeatAll:
-			repeat = on
-		case player.RepeatOne:
-			repeat, ricon = on, iconRepeat1
-		}
-		if iconButton(c.Key("repeat"), ricon, size*0.62, repeat, "循环").Clicked() {
-			pl.CycleRepeat()
-		}
+		// As wide as the mode's button, for play to stay in the middle.
+		ui.Box(c).Width(size*0.62 + 16).Height(1)
 	})
+}
+
+// modeIcon is the icon of play mode m.
+func modeIcon(m player.PlayMode) *ui.SVG {
+	switch m {
+	case player.ModeLoop:
+		return iconRepeat
+	case player.ModeOne:
+		return iconRepeat1
+	case player.ModeShuffle:
+		return iconShuffle
+	}
+	return iconOrder
 }
 
 // The bar of glass floats as a capsule, its corners concentric with those of

@@ -93,9 +93,9 @@ func (a *app) toggleSaved(pl netease.Playlist) {
 				a.setSaved(pl, !save, max(at, 0))
 				a.toast = "操作失败，请稍后再试"
 			case save:
-				a.toast = "已收藏"
+				a.say("save-playlist", "已收藏")
 			default:
-				a.toast = "已取消收藏"
+				a.say("save-playlist", "已取消收藏")
 			}
 		})
 	}()

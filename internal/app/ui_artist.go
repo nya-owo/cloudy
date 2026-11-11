@@ -248,9 +248,9 @@ func (a *app) toggleFollow(id int64) {
 				ar.Followed = !follow
 				a.toast = "操作失败，请稍后再试"
 			case follow:
-				a.toast = "已关注"
+				a.say("follow", "已关注")
 			default:
-				a.toast = "已取消关注"
+				a.say("follow", "已取消关注")
 			}
 		})
 	}()
@@ -370,16 +370,10 @@ func (a *app) artistHeader(c *ui.Context, d *artistData) {
 			}
 			ui.Row(c).Gap(10).Margin(10, 0, 0, 0).Children(func() {
 				if pillButton(c.Key("play"), iconPlay, "播放", p.accent, p.onAccent).Clicked() {
-					if a.pl.Shuffle() {
-						a.pl.ToggleShuffle()
-					}
-					a.pl.PlayQueue(songs, firstPlayable(songs))
+					a.playList(songs, false)
 				}
 				if pillButton(c.Key("shuffle"), iconShuffle, "随机播放", p.hover.Over(p.bg), p.text).Clicked() {
-					if !a.pl.Shuffle() {
-						a.pl.ToggleShuffle()
-					}
-					a.pl.PlayQueue(songs, firstPlayable(songs))
+					a.playList(songs, true)
 				}
 				icon, label := iconPlus, "关注"
 				if ar.Followed {

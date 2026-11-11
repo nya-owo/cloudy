@@ -144,3 +144,16 @@ func SubscribePlaylist(id int64, subscribe bool) error {
 	}
 	return nil
 }
+
+// CreatedPodcasts returns the podcasts user uid made, as their page lists
+// them.
+func CreatedPodcasts(uid int64) ([]Podcast, error) {
+	var res struct {
+		Podcasts []Podcast `json:"djRadios"`
+	}
+	q := url.Values{"userId": {strconv.FormatInt(uid, 10)}}
+	if err := get("/api/djradio/get/byuser", q, &res); err != nil {
+		return nil, err
+	}
+	return res.Podcasts, nil
+}

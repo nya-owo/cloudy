@@ -412,6 +412,18 @@ func (s *checkedStream) Read(dst []float32) (int, error) {
 	return n, err
 }
 
+// whole reports whether all of the song's bytes came in, without error.
+func (s *checkedStream) whole() bool {
+	dl, _ := s.source()
+	if dl == nil {
+		return false
+	}
+	d := dl.root()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.done && d.err == nil && (d.size <= 0 || d.n >= d.size)
+}
+
 func (s *checkedStream) Err() error {
 	s.mu.Lock()
 	err := s.err

@@ -239,8 +239,11 @@ func (a *app) lyricTools(c *ui.Context, id int64, at ui.Rect) {
 		a.changed()
 	}
 	scale := int(math.Round(float64(a.lyricScale()) * 100))
-	bar := ui.Row(c.Key("lyric-tools")).Absolute().Left(at.X).Top(at.Y).Width(at.W).Justify(ui.Center).Gap(10).AlignItems(ui.Center).Label("歌词调整")
-	reveal(bar, a.npPointer).Children(func() {
+	// Hidden till the pointer comes over them: most of the time no one
+	// needs them, and they are in the way of the cover's calm.
+	bar := ui.Row(c.Key("lyric-tools")).Absolute().Left(at.X).Top(at.Y-8).Width(at.W).Padding(8, 0, 8, 0).
+		Justify(ui.Center).Gap(10).AlignItems(ui.Center).Label("歌词调整")
+	reveal(bar, bar.Hovered()).Children(func() {
 		group := func(key string, chips func()) {
 			ui.Row(c.Key(key)).Height(32).Padding(2).Radius(999).AlignItems(ui.Center).
 				Background(white.Alpha(0.04)).Border(1, white.Alpha(0.1)).Children(chips)
