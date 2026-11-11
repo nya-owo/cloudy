@@ -113,9 +113,9 @@ func TestLyricGlideBounce(t *testing.T) {
 	}
 }
 
-// Dragging the middle values makes fine adjustments, while clicking them
-// still resets what was set with either the coarse buttons or a drag.
-func TestLyricToolsScrubValues(t *testing.T) {
+// The wheel over the middle values makes fine adjustments, kept once it
+// rests, while clicking them still resets what was set either way.
+func TestLyricToolsWheelValues(t *testing.T) {
 	a := newTestApp()
 	a.settings = defaultSettings()
 	a.settings.path = filepath.Join(t.TempDir(), "settings.json")
@@ -131,35 +131,41 @@ func TestLyricToolsScrubValues(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	drag := func(label string, dx float32) {
+	wheel := func(label string, notches int) {
 		t.Helper()
 		r, ok := tt.Find(label)
 		if !ok {
 			t.Fatalf("no %q button", label)
 		}
-		x, y := r.X+r.W/2, r.Y+r.H/2
 		before := loadSettingsFrom(a.settings.path)
-		tt.Press(x, y)
-		tt.Move(x+dx, y)
+		for range max(notches, -notches) {
+			dy := float32(-100)
+			if notches < 0 {
+				dy = 100
+			}
+			tt.Wheel(r.X+r.W/2, r.Y+r.H/2, 0, dy)
+		}
+		tt.Frame()
 		during := loadSettingsFrom(a.settings.path)
 		if during.LyricScale != before.LyricScale || during.LyricShift[id] != before.LyricShift[id] {
-			t.Fatal("drag saved settings before release")
+			t.Fatal("the wheel saved settings before it rested")
 		}
-		tt.Release(x+dx, y)
+		a.lyricWheelAt = time.Now().Add(-lyricWheelRest)
+		tt.Frame()
 	}
 	click("歌词字号增大")
-	drag("恢复歌词字号", -15)
+	wheel("恢复歌词字号", -3)
 	if got := a.lyricScale(); math.Abs(float64(got)-1.07) > 0.00001 {
-		t.Errorf("drag set scale to %v, want 107%%", got)
+		t.Errorf("the wheel set scale to %v, want 107%%", got)
 	}
 	click("恢复歌词字号")
 	if got := a.lyricScale(); got != 1 {
 		t.Errorf("click reset scale to %v, want 100%%", got)
 	}
 	click("歌词提前 0.1 秒")
-	drag("恢复歌词时间", 15)
+	wheel("恢复歌词时间", 3)
 	if got := a.lyricShift(id); got != 130*time.Millisecond {
-		t.Errorf("drag shifted lyrics by %v, want 130 ms", got)
+		t.Errorf("the wheel shifted lyrics by %v, want 130 ms", got)
 	}
 	if got := loadSettingsFrom(a.settings.path).LyricShift[id]; got != 130 {
 		t.Errorf("saved shift is %d ms, want 130 ms", got)
