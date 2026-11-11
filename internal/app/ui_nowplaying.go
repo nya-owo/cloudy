@@ -746,6 +746,9 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 	// Wait for layout to take the new padding or type size before measuring the target.
 	if focus != a.lyricGlide.focus {
 		a.lyricGlide.focus = focus
+		// The new layout may move the offset to keep it in range: not the
+		// listener scrolling.
+		a.lyricGlide.reflowed = true
 		a.lyricAt = -2
 		c.AnimationFrame()
 		return
@@ -806,6 +809,9 @@ type lyricGlide struct {
 	// were taken for a while (lyricHold), to pick a line from.
 	took  time.Time
 	focus lyricFocus
+	// The layout changed last frame: an offset moved with it is no
+	// scroll of the listener.
+	reflowed bool
 }
 
 // lyricHold is how long the lines stay where the listener scrolled them
@@ -883,8 +889,12 @@ func (g *lyricGlide) step(c *ui.Context, s *ui.ScrollState) float32 {
 	if g.pending {
 		s.Y, g.set, g.pending = g.target, g.target, false
 	}
+	reflowed := g.reflowed
+	g.reflowed = false
 	lag, v := g.at(c.Now())
-	if s.Y != g.set {
+	if s.Y != g.set && reflowed {
+		g.set = s.Y
+	} else if s.Y != g.set {
 		// The listener took over: the offset takes what showed.
 		if g.on {
 			s.Y, g.on = max(0, min(s.Y+float32(lag), s.MaxY)), false
