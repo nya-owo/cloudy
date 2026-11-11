@@ -2,7 +2,7 @@
   "name": "Cloudy",
   "identifier": "io.github.nya-owo.cloud-nya",
   "slug": "cloudy",
-  "version": "1.2.9",
+  "version": "1.2.10",
   "out": "build",
   "updates": {
     "publicKey": "F3Su/2E+0t0xrBajRl0Ial0MP4+CxMihdafm/ujNAZg=",
