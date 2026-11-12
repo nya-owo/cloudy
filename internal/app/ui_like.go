@@ -20,23 +20,6 @@ var (
 	programsLiked = netease.ProgramsLiked
 )
 
-// loadLiked loads the listener's liked songs.
-func (a *app) loadLiked(uid int64) {
-	gen := a.accountGen
-	go func() {
-		ids, err := netease.LikedIDs(uid)
-		a.post(func() {
-			if err != nil || gen != a.accountGen || a.profile == nil || a.profile.UserID != uid {
-				return
-			}
-			a.liked = make(map[int64]bool, len(ids))
-			for _, id := range ids {
-				a.liked[id] = true
-			}
-		})
-	}()
-}
-
 // toggleLike likes a song or an episode, or unlikes it, at once in the app
 // and then with NetEase, which may refuse: the heart goes back then. Signed
 // out, it asks the listener to sign in.
@@ -56,15 +39,7 @@ func (a *app) toggleLike(tr *netease.Track) {
 	if a.liked == nil {
 		a.liked = map[int64]bool{}
 	}
-	id, like := tr.ID, !a.liked[tr.ID]
-	gen := a.accountGen
-	a.setLiked(id, like)
-	go func() {
-		err := likeSong(id, like)
-		a.post(func() {
-			a.likeAnswered(gen, id, like, err)
-		})
-	}()
+	a.editLike(tr)
 }
 
 func (a *app) toggleProgramLike(id int64) {
@@ -180,6 +155,10 @@ func (a *app) programLikesAnswered(uid int64, asked []int64, liked map[int64]boo
 // pops it in on a spring while a ring swells around it and confetti flies
 // out; unliking lets it give a little.
 func (a *app) likeButton(c *ui.Context, tr *netease.Track, size float32, color ui.Color) ui.Element {
+	return a.heartButton(c, tr, size, color, a.pal.accent, iconHeart, iconHeartFill)
+}
+
+func (a *app) heartButton(c *ui.Context, tr *netease.Track, size float32, color, likedColor ui.Color, outline, filled *ui.SVG) ui.Element {
 	// A file on disk has no heart at NetEase.
 	if tr.LocalPath != "" {
 		return ui.Box(c).Size(size+16, size+16)
@@ -188,9 +167,9 @@ func (a *app) likeButton(c *ui.Context, tr *netease.Track, size float32, color u
 		a.askProgramLikes([]int64{tr.ProgramID})
 	}
 	liked := a.isLiked(tr)
-	icon, label := iconHeart, "喜欢"
+	icon, label := outline, "喜欢"
 	if liked {
-		icon, color, label = iconHeartFill, a.pal.accent, "取消喜欢"
+		icon, color, label = filled, likedColor, "取消喜欢"
 	}
 	// The burst goes on a wrapper, which the heart's pop does not scale.
 	wrap := ui.Box(c).Center()
@@ -211,7 +190,7 @@ func (a *app) likeButton(c *ui.Context, tr *netease.Track, size float32, color u
 		a.toggleLike(tr)
 	}
 	if !burst.IsZero() {
-		start, accent := *burst, a.pal.accent
+		start, accent := *burst, likedColor
 		wrap.DrawOver(func(p *ui.Painter, r ui.Rect) {
 			if drawBurst(p, r, size, p.Now().Sub(start), accent) {
 				p.AnimationFrame()
@@ -276,19 +255,29 @@ func (a *app) likeAnswered(gen int, id int64, like bool, err error) {
 	if gen != a.accountGen || a.profile == nil {
 		return
 	}
-	if err != nil {
-		a.setLiked(id, !like)
-		a.toast = "操作失败，请稍后再试"
+	e := a.likeEdits[id]
+	if e == nil {
+		if err != nil {
+			a.setLiked(id, !like)
+			a.toast = "操作失败，请稍后再试"
+		}
 		return
 	}
-	// The liked songs' playlist changed: load it anew when shown.
-	for _, pl := range a.mine {
-		if pl.SpecialType == 5 {
-			delete(a.playlists, pl.ID)
-			if a.route.page == pagePlaylist && a.route.id == pl.ID {
-				a.loadPlaylist(pl.ID, false)
-			}
-		}
+	e.busy = false
+	if err == nil {
+		e.confirmed = like
+		a.redCountChanged(id)
+	} else if e.desired == like {
+		e.desired = e.confirmed
+		a.applyLike(e, e.confirmed)
+		a.say("like", "操作失败，已恢复原状态，请稍后重试")
+	}
+	if err != nil {
+		a.likeNext = time.Now().Add(2 * time.Second)
+	}
+	a.sendLike(id, e)
+	if len(a.likeEdits) == 0 && a.route.page == pagePlaylist && a.playlists[a.route.id] == nil {
+		a.loadPlaylist(a.route.id, false)
 	}
 }
 

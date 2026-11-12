@@ -56,6 +56,13 @@ func (a *app) boot() {
 // signedIn shows what is personal to prof, or to nobody.
 func (a *app) signedIn(prof *netease.Profile) {
 	a.accountGen++
+	for _, e := range a.likeEdits {
+		if e.timer != nil {
+			e.timer.Stop()
+		}
+	}
+	a.likeNext = time.Time{}
+	a.trackLayout = trackRowLayout{}
 	a.cancelRadioStart()
 	a.profile = prof
 	// Playback picks up where it was left, once the session that lets
@@ -64,6 +71,10 @@ func (a *app) signedIn(prof *netease.Profile) {
 	a.restoreDownloadQueue()
 	a.uploadsFor(prof)
 	a.mine, a.saved, a.recPlaylists, a.liked = nil, nil, nil, nil
+	a.likeEdits, a.redCounts, a.playlistAt = nil, nil, nil
+	a.likeRevision++
+	a.likeBatches = 0
+	a.librarySync = librarySync{}
 	a.style = styleState{}
 	a.radar = radarState{open: a.radar.open}
 	a.myAlbums, a.myAlbumsErr, a.myAlbumsBusy = nil, "", false
@@ -82,8 +93,7 @@ func (a *app) signedIn(prof *netease.Profile) {
 	if prof == nil {
 		return
 	}
-	a.loadLiked(prof.UserID)
-	a.loadMine(prof.UserID)
+	a.refreshLibrary(time.Now())
 	a.loadMyAlbums()
 }
 

@@ -38,9 +38,11 @@ func TestLikeFromPlayerBar(t *testing.T) {
 	if !a.liked[7] {
 		t.Fatal("the heart did not fill at once")
 	}
+	flushTestLike(a, tr.ID)
 	if like := <-calls; !like {
 		t.Error("asked NetEase to unlike")
 	}
+	a.likeAnswered(a.accountGen, tr.ID, true, nil)
 	tt.Frame()
 	if err := tt.Click("取消喜欢"); err != nil {
 		t.Fatal(err)
@@ -48,6 +50,7 @@ func TestLikeFromPlayerBar(t *testing.T) {
 	if a.liked[7] {
 		t.Error("still liked after unliking")
 	}
+	flushTestLike(a, tr.ID)
 	if like := <-calls; like {
 		t.Error("asked NetEase to like again")
 	}

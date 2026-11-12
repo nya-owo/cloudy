@@ -404,6 +404,17 @@ func (a *app) trackRowsGrouped(c *ui.Context, tracks []netease.Track, groups []a
 	a.underTop, a.underBottom = true, true
 	a.listOpened(c)
 	rows := len(items) + 1 + len(footer)
+	// Stable song identities let a row carry its animation to a new slot.
+	// Keep the viewport offset while neighboring rows close a removed gap.
+	moveRows := a.route.page == pagePlaylist && a.isLikedPlaylist(a.route.id)
+	var positions []float32
+	if moveRows {
+		positions = a.movingTrackRows(tracks, items, groups, rows)
+	} else {
+		a.trackList.Key = nil
+		a.trackList.KeepOffset = false
+		a.trackLayout = trackRowLayout{}
+	}
 	ui.List(c.Key(a.route), &a.trackList, rows, func(i int) {
 		if i == 0 {
 			ui.Column(c).Children(func() {
@@ -419,7 +430,8 @@ func (a *app) trackRowsGrouped(c *ui.Context, tracks []netease.Track, groups []a
 			footer[i-len(items)-1](c)
 			return
 		}
-		i = items[i-1]
+		slot := i - 1
+		i = items[slot]
 		if i < 0 {
 			a.albumTitle(c, groups[-1-i], -1-i == 0)
 			return
@@ -428,6 +440,10 @@ func (a *app) trackRowsGrouped(c *ui.Context, tracks []netease.Track, groups []a
 		playing := cur != nil && cur.ID == tr.ID
 		selected := batch && a.batch.selected[tr.ID]
 		row := ui.ButtonBase(c.Key(tr.ID)).Height(54).PaddingX(12).Gap(14).Radius(14).AlignItems(ui.Center).FocusRing(false).Label(tr.Name)
+		shift := float32(0)
+		if moveRows {
+			shift = a.trackRowShift(row, positions[slot])
+		}
 		if !batch {
 			a.songContext(row, tr, pid)
 		}
@@ -450,8 +466,9 @@ func (a *app) trackRowsGrouped(c *ui.Context, tracks []netease.Track, groups []a
 		}
 		shown := a.rowIn(c, i)
 		if shown < 1 {
-			row.Translate(0, 10*(1-shown))
+			shift += 10 * (1 - shown)
 		}
+		row.Translate(0, shift)
 		if !tr.Playable() {
 			shown *= 0.42
 		}

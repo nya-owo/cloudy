@@ -105,6 +105,11 @@ func (s *flacStream) parse(r io.Reader) (*frame.Frame, error) {
 
 func (s *flacStream) Read(dst []float32) (int, error) {
 	for len(s.pend) == 0 {
+		// Tags may follow the last audio frame. Once all declared samples
+		// were decoded, they are not another frame to parse.
+		if s.info.NSamples > 0 && uint64(s.pos) >= s.info.NSamples {
+			return 0, io.EOF
+		}
 		f, err := s.parse(s.r)
 		if err != nil {
 			if err == io.ErrUnexpectedEOF {

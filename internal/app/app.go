@@ -74,9 +74,16 @@ type app struct {
 	deleting     deleteDialog   // whether to delete a playlist, asked
 	signingOut   bool           // whether to sign out, asked
 	liked        map[int64]bool // the songs the listener likes
-	toast        string         // a message to show once
-	toastAs      string         // what the toast says the state of, to take the place of the last
-	picked       pickedUp       // the song a login picked up, waiting to play
+	likeEdits    map[int64]*likeEdit
+	likeNext     time.Time // earliest next individual song request
+	likeRevision int       // local edits newer than a personal-data request
+	likeBatches  int       // bulk requests still being sent
+	librarySync  librarySync
+	playlistAt   map[int64]time.Time
+	redCounts    map[int64]*redCountState
+	toast        string   // a message to show once
+	toastAs      string   // what the toast says the state of, to take the place of the last
+	picked       pickedUp // the song a login picked up, waiting to play
 
 	// The episodes the listener likes, and doesn't, as far as NetEase has
 	// answered, and those asked about: see ui_like.go.
@@ -95,19 +102,20 @@ type app struct {
 	homeLoading       bool
 	homeAt            time.Time // when what the home page shows was asked for
 
-	playlists  map[int64]*netease.Playlist
-	loadingPl  map[int64]bool
-	plErr      map[int64]string
-	artists    map[int64]*artistData
-	artistTab  int // what an artist's page lists: artistHot, artistLatest, artistAlbums or artistEvents
-	albums     map[int64]*albumData
-	users      map[int64]*userData
-	podcasts   map[int64]*podcastData
-	podcastTab *podcastTab // the podcasts tab's lists
-	trackList  ui.ListState
-	trackRow   []int // the row of trackList each song shown is at
-	groupRow   []int // the row of trackList each album's title is at, sorted by album
-	batch      batchSelection
+	playlists   map[int64]*netease.Playlist
+	loadingPl   map[int64]bool
+	plErr       map[int64]string
+	artists     map[int64]*artistData
+	artistTab   int // what an artist's page lists: artistHot, artistLatest, artistAlbums or artistEvents
+	albums      map[int64]*albumData
+	users       map[int64]*userData
+	podcasts    map[int64]*podcastData
+	podcastTab  *podcastTab // the podcasts tab's lists
+	trackList   ui.ListState
+	trackLayout trackRowLayout
+	trackRow    []int // the row of trackList each song shown is at
+	groupRow    []int // the row of trackList each album's title is at, sorted by album
+	batch       batchSelection
 	// Where the page and the sidebar are scrolled, kept while Now Playing
 	// covers them, unbuilt.
 	pageScroll ui.ScrollState
@@ -381,7 +389,7 @@ func Run() error {
 		a.win.OnShow(a.syncDock)
 		a.win.OnHide(a.syncDock)
 		// Shown or switched to the morning after, it shows the new day's.
-		a.win.OnFocus(a.freshenHome)
+		a.win.OnFocus(a.freshenPersonal)
 		a.listenForDrops()
 		a.loadLibraryLater()
 		a.applyTray()

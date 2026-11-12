@@ -14,6 +14,12 @@ import (
 const sidebarWidth = 232
 
 func (a *app) view(c *ui.Context) {
+	// Poll quietly while the real window is open. Testers do not start
+	// background account requests just by drawing a frame.
+	if a.win != nil && a.profile != nil {
+		a.pollPersonal(c.Now())
+		c.After(30 * time.Second)
+	}
 	t := *c.Theme()
 	a.pal = paletteFor(&t)
 	if accent := a.chosenAccent(); accent != "" {
@@ -299,6 +305,7 @@ func (a *app) load(r route) {
 	case pageHome:
 		a.freshenHome()
 	case pagePlaylist:
+		a.refreshLibrary(time.Now())
 		a.loadPlaylist(r.id, false)
 	case pageSearch:
 		a.loadSearch(r, false)
@@ -307,6 +314,9 @@ func (a *app) load(r route) {
 	case pageAlbum:
 		a.loadAlbum(r.id)
 	case pageUser:
+		if a.profile != nil && r.id == a.profile.UserID {
+			a.refreshLibrary(time.Now())
+		}
 		a.loadUser(r.id)
 	case pagePodcast:
 		a.loadPodcast(r.id)
@@ -689,11 +699,16 @@ func dailyRenewed(loaded, now time.Time) bool {
 }
 
 func (a *app) loadPlaylist(id int64, thenPlay bool) {
+	if a.isLikedPlaylist(id) && (len(a.likeEdits) != 0 || a.likeBatches != 0) && !thenPlay {
+		return
+	}
 	if pl := a.playlists[id]; pl != nil {
 		if thenPlay {
 			a.pl.PlayQueue(pl.Tracks, firstPlayable(pl.Tracks))
 		}
-		return
+		if thenPlay || time.Since(a.playlistAt[id]) < personalRefreshGap {
+			return
+		}
 	}
 	if a.loadingPl[id] {
 		return
@@ -701,9 +716,18 @@ func (a *app) loadPlaylist(id int64, thenPlay bool) {
 	a.loadingPl[id] = true
 	delete(a.plErr, id)
 	gen := a.accountGen
+	revision := a.likeRevision
 	go func() {
-		pl, err := netease.PlaylistDetail(id)
+		pl, err := fetchPlaylist(id)
 		a.post(func() {
+			if gen == a.accountGen && revision != a.likeRevision && a.isLikedPlaylist(id) {
+				delete(a.loadingPl, id)
+				// Keep a local edit on screen; an initial load can ask again.
+				if a.playlists[id] == nil {
+					a.loadPlaylist(id, thenPlay)
+				}
+				return
+			}
 			a.playlistAnswered(gen, id, pl, err, thenPlay)
 		})
 	}()
@@ -736,6 +760,10 @@ func (a *app) playlistAnswered(gen int, id int64, pl *netease.Playlist, err erro
 		return
 	}
 	a.playlists[id] = pl
+	if a.playlistAt == nil {
+		a.playlistAt = map[int64]time.Time{}
+	}
+	a.playlistAt[id] = time.Now()
 	if thenPlay {
 		a.pl.PlayQueue(pl.Tracks, firstPlayable(pl.Tracks))
 	}

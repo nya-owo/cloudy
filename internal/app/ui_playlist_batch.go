@@ -105,12 +105,14 @@ func (a *app) setLikedAll(tracks []netease.Track, like bool) {
 		return
 	}
 	seen := map[int64]bool{}
+	edits := map[int64]*likeEdit{}
 	var ids []int64
 	for _, tr := range tracks {
 		if tr.LocalPath != "" || tr.ProgramID != 0 || tr.ID == 0 || seen[tr.ID] || a.liked[tr.ID] == like {
 			continue
 		}
 		seen[tr.ID] = true
+		edits[tr.ID] = a.newLikeEdit(&tr)
 		ids = append(ids, tr.ID)
 	}
 	if len(ids) == 0 {
@@ -123,8 +125,9 @@ func (a *app) setLikedAll(tracks []netease.Track, like bool) {
 		return
 	}
 	for _, id := range ids {
-		a.setLiked(id, like)
+		a.applyLike(edits[id], like)
 	}
+	a.likeBatches++
 	doing, done := "正在喜欢 %d 首…", "已喜欢 %d 首"
 	if !like {
 		doing, done = "正在取消喜欢 %d 首…", "已取消喜欢 %d 首"
@@ -138,7 +141,9 @@ func (a *app) setLikedAll(tracks []netease.Track, like bool) {
 				failed++
 				a.post(func() {
 					if gen == a.accountGen {
-						a.setLiked(id, !like)
+						if a.likeEdits[id] == nil && a.liked[id] == like {
+							a.applyLike(edits[id], !like)
+						}
 					}
 				})
 			}
@@ -150,6 +155,7 @@ func (a *app) setLikedAll(tracks []netease.Track, like bool) {
 			if gen != a.accountGen {
 				return
 			}
+			a.likeBatches--
 			if failed == 0 {
 				a.toast = fmt.Sprintf(done, len(ids))
 			} else {
