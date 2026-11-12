@@ -229,8 +229,8 @@ type app struct {
 
 	// The songs saved to disk, the ones on their way there, and where both
 	// are kept.
-	dl downloadState
-	lib localLibrary
+	dl     downloadState
+	lib    localLibrary
 	opened *openedFiles // the songs opened with Cloudy, coming in
 
 	restored     bool   // playback picked up where it was left
