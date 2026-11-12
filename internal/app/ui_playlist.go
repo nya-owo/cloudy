@@ -28,10 +28,141 @@ type plView struct {
 	sorted  int
 	tracks  []netease.Track
 	matched bool
+	album   string // the album chosen in the album index, by albumKey: only its songs show
+	only    string // the album the songs shown were kept to
+	// groups are the albums the songs shown fall in, sorted by album; all,
+	// those of every song matched, for the album index.
+	groups, all []albumGroup
+	// The album index: whether it is open, and what it is searched for.
+	indexOpen  bool
+	indexQuery string
+}
+
+// albumGroup is an album's songs, together in a list sorted by album: from
+// start, n of them.
+type albumGroup struct {
+	key                 string // albumKey of its songs
+	name, artist, cover string
+	id                  int64 // the album's, when NetEase knows it
+	artistID            int64 // the artist's, for a group of an artist's songs
+	start, n            int
+	length              time.Duration
+}
+
+// Where 按歌手 and 按专辑 are among plSorts: those whose songs show under
+// a title for each artist or album.
+const (
+	sortArtist = 2
+	sortAlbum  = 4
+)
+
+// artistGroups finds the artists of tracks, sorted by their first artist.
+func artistGroups(tracks []netease.Track) []albumGroup {
+	var groups []albumGroup
+	albums := map[string]bool{}
+	for i := range tracks {
+		t := &tracks[i]
+		name := firstArtist(t)
+		if n := len(groups); n > 0 && groups[n-1].name == name {
+			g := &groups[n-1]
+			g.n++
+			g.length += t.Length()
+			if g.cover == "" {
+				g.cover = t.Album.PicURL
+			}
+			albums[albumKey(t)] = true
+			g.artist = fmt.Sprintf("%d 张专辑", len(albums))
+			continue
+		}
+		clear(albums)
+		albums[albumKey(t)] = true
+		var id int64
+		if len(t.Artists) > 0 {
+			id = t.Artists[0].ID
+		}
+		if name == "" {
+			name = "未知歌手"
+		}
+		groups = append(groups, albumGroup{key: "artist\x1f" + name, name: name, artist: "1 张专辑", cover: t.Album.PicURL,
+			artistID: id, start: i, n: 1, length: t.Length()})
+	}
+	return groups
 }
 
 // How a list of songs can be sorted.
-var plSorts = []string{"默认排序", "按歌名", "按歌手", "按时长"}
+var plSorts = []string{"默认排序", "按歌名", "按歌手", "按时长", "按专辑"}
+
+// albumArtist tells apart albums of one name that NetEase does not know,
+// as files of the listener's: by their artist. NetEase's own albums are
+// told apart by their ID, and keep their songs of several artists together.
+func albumArtist(t *netease.Track) string {
+	if t.Album.ID != 0 {
+		return ""
+	}
+	return firstArtist(t)
+}
+
+// byAlbum orders songs so that each album's keep together: by the album's
+// name, then which album of that name it is, and within it by the songs'
+// names. Songs of no album come last.
+func byAlbum(x, y netease.Track) int {
+	if (x.Album.Name == "") != (y.Album.Name == "") {
+		if x.Album.Name == "" {
+			return 1
+		}
+		return -1
+	}
+	if c := strings.Compare(x.Album.Name, y.Album.Name); c != 0 {
+		return c
+	}
+	if x.Album.ID != y.Album.ID {
+		if x.Album.ID < y.Album.ID {
+			return -1
+		}
+		return 1
+	}
+	if c := strings.Compare(albumArtist(&x), albumArtist(&y)); c != 0 {
+		return c
+	}
+	return strings.Compare(x.Name, y.Name)
+}
+
+// albumGroups finds the albums of tracks, sorted by byAlbum.
+func albumGroups(tracks []netease.Track) []albumGroup {
+	var groups []albumGroup
+	for i := range tracks {
+		t := &tracks[i]
+		if n := len(groups); n > 0 && byAlbumOnly(&tracks[groups[n-1].start], t) {
+			g := &groups[n-1]
+			g.n++
+			g.length += t.Length()
+			if g.cover == "" {
+				g.cover = t.Album.PicURL
+			}
+			if g.artist != firstArtist(t) {
+				g.artist = "多位歌手"
+			}
+			continue
+		}
+		name := t.Album.Name
+		if name == "" {
+			name = "未知专辑"
+		}
+		groups = append(groups, albumGroup{key: albumKey(t), name: name, artist: firstArtist(t), cover: t.Album.PicURL, id: t.Album.ID,
+			start: i, n: 1, length: t.Length()})
+	}
+	return groups
+}
+
+// byAlbumOnly reports whether x and y are of one album.
+func byAlbumOnly(x, y *netease.Track) bool {
+	return albumKey(x) == albumKey(y)
+}
+
+// albumKey names the album of t, as byAlbum tells albums apart.
+func albumKey(t *netease.Track) string {
+	return fmt.Sprintf("%s\x1f%d\x1f%s", t.Album.Name, t.Album.ID, albumArtist(t))
+}
 
 // listShown returns the songs of tracks that show, in the order they show.
 func (a *app) listShown(tracks []netease.Track) []netease.Track {
@@ -41,9 +172,10 @@ func (a *app) listShown(tracks []netease.Track) []netease.Track {
 	}
 	q := strings.ToLower(strings.TrimSpace(v.query))
 	if len(tracks) == 0 || q == "" && v.sort == 0 {
+		v.groups, v.all = nil, nil
 		return tracks
 	}
-	if v.matched && v.of == &tracks[0] && v.n == len(tracks) && v.asked == q && v.sorted == v.sort {
+	if v.matched && v.of == &tracks[0] && v.n == len(tracks) && v.asked == q && v.sorted == v.sort && v.only == v.album {
 		return v.tracks
 	}
 	var out []netease.Track
@@ -59,8 +191,29 @@ func (a *app) listShown(tracks []netease.Track) []netease.Track {
 		slices.SortStableFunc(out, func(x, y netease.Track) int { return strings.Compare(firstArtist(&x), firstArtist(&y)) })
 	case 3:
 		slices.SortStableFunc(out, func(x, y netease.Track) int { return int(y.Length() - x.Length()) })
+	case sortAlbum:
+		slices.SortStableFunc(out, byAlbum)
 	}
-	v.of, v.n, v.asked, v.sorted, v.tracks, v.matched = &tracks[0], len(tracks), q, v.sort, out, true
+	v.groups, v.all = nil, nil
+	switch {
+	case v.sort == sortAlbum && a.route.page != pageAlbum:
+		v.all = albumGroups(out)
+	case v.sort == sortArtist && a.route.page != pageArtist:
+		v.all = artistGroups(out)
+	}
+	if v.all != nil {
+		v.groups = v.all
+		// Kept to the album chosen in the index, if the songs matched have it.
+		if v.album != "" {
+			if k := slices.IndexFunc(v.all, func(g albumGroup) bool { return g.key == v.album }); k >= 0 {
+				g := v.all[k]
+				out = out[g.start : g.start+g.n]
+				g.start = 0
+				v.groups = []albumGroup{g}
+			}
+		}
+	}
+	v.of, v.n, v.asked, v.sorted, v.tracks, v.matched, v.only = &tracks[0], len(tracks), q, v.sort, out, true, v.album
 	return out
 }
 
@@ -71,7 +224,7 @@ func (a *app) toolRows(c *ui.Context, tracks []netease.Track, covers bool, heade
 	if len(shown) == 0 && len(tracks) > 0 {
 		foot = append(foot, func(c *ui.Context) { a.empty(c, "没有匹配的歌曲") })
 	}
-	a.trackRows(c, shown, covers, func(c *ui.Context) {
+	a.trackRowsGrouped(c, shown, a.plView.groups, covers, func(c *ui.Context) {
 		header(c)
 		a.listTools(c, tracks, shown)
 	}, foot...)
@@ -288,13 +441,12 @@ func (a *app) listTools(c *ui.Context, tracks, shown []netease.Track) {
 		if cur := a.pl.Current(); cur != nil {
 			if i := slices.IndexFunc(shown, func(t netease.Track) bool { return t.ID == cur.ID }); i >= 0 {
 				if iconButton(c.Key("locate"), iconLocate, 15, p.muted, "定位到正在播放").Size(32, 32).Clicked() {
-					// The list's first row is the header.
-					a.trackList.ScrollTo(i+1, ui.Center)
+					a.trackList.ScrollTo(a.rowOfTrack(i), ui.Center)
 				}
 			}
 		}
 		// A playlist's and the downloads' own menus start theirs.
-		if pg := a.route.page; pg != pagePlaylist && pg != pageDownloads {
+		if pg := a.route.page; pg != pagePlaylist && pg != pageDownloads && pg != pageLocal {
 			a.batchEntry(c)
 		}
 		field := ui.Row(c).Width(210).Height(32).PaddingX(12).Gap(7).Radius(999).AlignItems(ui.Center)
@@ -321,6 +473,9 @@ func (a *app) listTools(c *ui.Context, tracks, shown []netease.Track) {
 			ui.Text(c, plSorts[v.sort]).FontSize(12.5).SingleLine()
 			ui.Icon(c, iconDown).Size(12, 12).TextColor(p.muted)
 		})
+		if len(v.all) > 1 {
+			a.albumIndexButton(c, v)
+		}
 		if sort.Clicked() {
 			acts := make([]menuAction, len(plSorts))
 			for i, label := range plSorts {

@@ -76,6 +76,7 @@ func (a *app) deleteDownload() {
 		}
 	}
 	a.dl.items = keep
+	a.noteDownloads()
 	if err := a.saveDownloads(); err != nil {
 		a.toast = "已删除文件，但下载记录没有保存"
 	} else {
@@ -111,6 +112,7 @@ func (a *app) deleteDownloadItems(items []download.Item) {
 		}
 	}
 	a.dl.items = keep
+	a.noteDownloads()
 	n := len(removed)
 	if err := a.saveDownloads(); err != nil {
 		a.toast = fmt.Sprintf("已删除 %d 首，但下载记录没有保存", n)

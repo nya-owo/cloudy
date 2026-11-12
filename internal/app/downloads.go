@@ -23,6 +23,22 @@ import (
 // fetchDownload saves a song; tests replace it.
 var fetchDownload = download.Fetch
 
+// chooseFolder asks for a folder, under title; tests replace it.
+var chooseFolder = func(parent *mygo.Window, title, start string) (string, error) {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+		Parent:            parent,
+		Title:             title,
+		DefaultPath:       start,
+		ButtonLabel:       "选择",
+		Directory:         true,
+		CreateDirectories: true,
+	})
+	if err != nil || len(paths) == 0 {
+		return "", err
+	}
+	return paths[0], nil
+}
+
 // chooseDownloadFolder asks for the folder downloaded songs are kept in;
 // tests replace it.
 var chooseDownloadFolder = func(parent *mygo.Window, start string) (string, error) {
@@ -145,6 +161,7 @@ func (a *app) loadDownloads(scan bool) {
 	items = existingDownloads(items)
 	sortDownloads(items)
 	a.dl.items = items
+	a.noteDownloads()
 	a.dl.loaded = true
 	a.fixDownloads()
 }
@@ -158,6 +175,7 @@ func (a *app) scanDownloadsLater(dir string, indexed []download.Item) {
 	known := existingDownloads(slices.Clone(indexed))
 	sortDownloads(known)
 	a.dl.items, a.dl.loaded = known, true
+	a.noteDownloads()
 	count := &scanCount{}
 	a.dl.scanned = count
 	artDir := a.dl.artDir
@@ -187,6 +205,7 @@ func (a *app) scanDownloadsLater(dir string, indexed []download.Item) {
 		}
 		sortDownloads(items)
 		a.dl.items = items
+		a.noteDownloads()
 		a.fixDownloads()
 		if err := a.saveDownloads(); err != nil {
 			a.dl.err = "无法保存下载记录"
@@ -381,6 +400,48 @@ func (a *app) downloadBytes() int64 {
 	return total
 }
 
+// noteDownloads tells the player where the downloaded songs are, after
+// a.dl.items changed: a song downloaded plays from its file wherever it is
+// started from.
+func (a *app) noteDownloads() {
+	files := make(map[int64]string, len(a.dl.items))
+	for _, it := range a.dl.items {
+		if id := it.Track.ID; id > 0 && files[id] == "" {
+			files[id] = it.Path
+		}
+	}
+	a.dl.files.Store(files)
+}
+
+// noteDownloadsAtStart reads the index of downloads off the window, for the
+// player to know them before the downloads page is first opened. What the
+// page reads, if it comes first, stays.
+func (a *app) noteDownloadsAtStart() {
+	store := a.downloadStore()
+	go func() {
+		items, err := store.Load()
+		if err != nil {
+			return
+		}
+		files := make(map[int64]string, len(items))
+		for _, it := range items {
+			if id := it.Track.ID; id > 0 && files[id] == "" {
+				files[id] = it.Path
+			}
+		}
+		a.dl.files.CompareAndSwap(nil, files)
+	}()
+}
+
+// downloadedFile is where the song with id was downloaded to, or "". It is
+// safe on any goroutine.
+func (a *app) downloadedFile(id int64) string {
+	if files, ok := a.dl.files.Load().(map[int64]string); ok {
+		return files[id]
+	}
+	return ""
+}
+
 // downloaded reports whether the song is already saved.
 func (a *app) downloaded(id int64) bool {
 	for _, it := range a.dl.items {
@@ -456,6 +517,7 @@ func (a *app) finishDownload(item download.Item, err error) {
 	switch {
 	case err == nil:
 		a.dl.items = append([]download.Item{item}, a.dl.items...)
+		a.noteDownloads()
 		sortDownloads(a.dl.items)
 		a.dl.loaded = true
 		if saveErr := a.saveDownloads(); saveErr != nil {
@@ -609,12 +671,18 @@ func downloadCover(s local.Song, dir string) string {
 // downloadedSongActions lists what can be done with a song whose file is
 // here: its title or path copied, and its file shown in the file manager.
 func (a *app) downloadedSongActions(tr *netease.Track) [][]menuAction {
-	return [][]menuAction{
+	song := *tr
+	groups := [][]menuAction{
+		{{label: "下一首播放", icon: iconNext, do: func() { a.playNext([]netease.Track{song}) }}},
 		{
 			{label: "复制歌名", icon: iconCopy, do: func() { copyText(tr.Name) }},
 			{label: "复制文件路径", icon: iconCopy, do: func() { copyText(tr.LocalPath) }},
 		},
 		{{label: "在文件夹中显示", icon: iconFolder, do: func() { mygo.Shell.ShowItemInFolder(tr.LocalPath) }}},
-		{{label: "从本地删除", icon: iconTrash, do: func() { a.confirmDeleteDownload(*tr) }}},
 	}
+	// Only what Cloudy downloaded: the listener's own music stays theirs.
+	if a.inDownloads(tr.LocalPath) {
+		groups = append(groups, []menuAction{{label: "从本地删除", icon: iconTrash, do: func() { a.confirmDeleteDownload(*tr) }}})
+	}
+	return groups
 }

@@ -4,6 +4,10 @@
   "slug": "cloudy",
   "version": "1.2.10",
   "out": "build",
+  "fileAssociations": [
+    { "ext": ["mp3"], "name": "MP3 音频", "mimeType": "audio/mpeg", "role": "Viewer" },
+    { "ext": ["flac"], "name": "FLAC 音频", "mimeType": "audio/flac", "role": "Viewer" }
+  ],
   "updates": {
     "publicKey": "F3Su/2E+0t0xrBajRl0Ial0MP4+CxMihdafm/ujNAZg=",
     "github": "nya-owo/cloudy",

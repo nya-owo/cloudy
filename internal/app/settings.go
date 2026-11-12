@@ -163,6 +163,12 @@ type settings struct {
 	// DownloadFolder is where the songs they download are kept; empty for
 	// the Cloudy Downloads folder among their music.
 	DownloadFolder string `json:"downloadFolder,omitempty"`
+	// CacheFolder is the folder the songs played are kept in, in a folder of
+	// their own; empty for the app's cache directory.
+	CacheFolder string `json:"cacheFolder,omitempty"`
+	// LocalFolders are the folders of the listener's own music, which the
+	// 本地音乐 page lists and watches.
+	LocalFolders []string `json:"localFolders,omitempty"`
 	// SearchHistory keeps submitted keywords, most recent first.
 	SearchHistory []string `json:"searchHistory,omitempty"`
 	// LyricTrans shows the translation under each line of lyrics. Off is

@@ -38,6 +38,10 @@ type Player struct {
 	Normalize func() bool
 	// Cache keeps the songs played, if set.
 	Cache *Cache
+	// Downloaded, if set, returns the file a song was downloaded to, or "":
+	// a downloaded song plays from it wherever it was started from, not
+	// from the network. It is called off the window's goroutine.
+	LocalFile func(id int64) string
 	// Changed, if set, hears that what plays, where it is or whether it
 	// plays changed.
 	Changed func()
@@ -943,35 +947,49 @@ var lyricsOf = netease.Lyrics
 
 var errNoLyrics = errors.New("player: no lyrics")
 
+// openLocal opens the song in the file at path, an MP3 or a FLAC.
+func openLocal(path string, d int64) (*netease.Stream, stream, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("本地文件无法读取：%s", filepath.Base(path))
+	}
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, nil, fmt.Errorf("本地文件无法读取：%s", filepath.Base(path))
+	}
+	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
+	if ext != "mp3" && ext != "flac" {
+		f.Close()
+		return nil, nil, fmt.Errorf("不支持的本地音乐格式：%s", ext)
+	}
+	st := &netease.Stream{Size: info.Size(), Type: ext, Level: "exhigh"}
+	if ext == "flac" {
+		st.Level = "lossless"
+	}
+	s, err := openStream(opened(f, info.Size()), d)
+	if err != nil {
+		f.Close()
+		return nil, nil, err
+	}
+	return st, s, nil
+}
+
 func (p *Player) openContext(ctx context.Context, t netease.Track, level string) (*netease.Stream, stream, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
 	if t.LocalPath != "" {
-		f, err := os.Open(t.LocalPath)
-		if err != nil {
-			return nil, nil, fmt.Errorf("本地文件无法读取：%s", filepath.Base(t.LocalPath))
+		return openLocal(t.LocalPath, t.Duration)
+	}
+	if p.LocalFile != nil && t.ID > 0 && t.ProgramID == 0 {
+		// Downloaded: from its file, whatever page it was started from. A
+		// file that fails to open plays from the network instead.
+		if path := p.LocalFile(t.ID); path != "" {
+			if st, s, err := openLocal(path, t.Duration); err == nil {
+				return st, s, nil
+			}
 		}
-		info, err := f.Stat()
-		if err != nil {
-			f.Close()
-			return nil, nil, fmt.Errorf("本地文件无法读取：%s", filepath.Base(t.LocalPath))
-		}
-		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(t.LocalPath)), ".")
-		if ext != "mp3" && ext != "flac" {
-			f.Close()
-			return nil, nil, fmt.Errorf("不支持的本地音乐格式：%s", ext)
-		}
-		st := &netease.Stream{Size: info.Size(), Type: ext, Level: "exhigh"}
-		if ext == "flac" {
-			st.Level = "lossless"
-		}
-		s, err := openStream(opened(f, info.Size()), t.Duration)
-		if err != nil {
-			f.Close()
-			return nil, nil, err
-		}
-		return st, s, nil
 	}
 	dl, info, ok := p.Cache.lookup(t.ID, level)
 	if ok {
@@ -1084,7 +1102,7 @@ func (p *Player) finish(s *checkedStream) {
 				path = dl.file.Name()
 			}
 			dl.mu.Unlock()
-			if filepath.Dir(path) == p.Cache.dir {
+			if filepath.Dir(path) == p.Cache.Dir() {
 				s.Close()
 				p.Cache.remove(path)
 			}

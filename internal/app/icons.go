@@ -40,6 +40,7 @@ var (
 	iconUser      = strokeIcon(`<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>`)
 	iconPodcast   = strokeIcon(`<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/>`)
 	iconFolder    = strokeIcon(`<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M10 16v-5l5-1v4"/><circle cx="8.5" cy="16" r="1.5"/><circle cx="13.5" cy="14" r="1.5"/>`)
+	iconLibrary   = strokeIcon(`<path d="M4.5 4v16"/><path d="M8.5 4v16"/><circle cx="16" cy="12.5" r="5.5"/><circle cx="16" cy="12.5" r="1.2"/>`)
 	iconUpload    = strokeIcon(`<path d="M12 15V5"/><path d="m7.5 9.5 4.5-4.5 4.5 4.5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>`)
 	iconDownload  = strokeIcon(`<path d="M12 3v10"/><path d="m7.5 8.5 4.5 4.5 4.5-4.5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>`)
 	iconHeadset   = strokeIcon(`<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>`)

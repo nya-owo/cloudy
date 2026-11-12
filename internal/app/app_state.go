@@ -31,6 +31,9 @@ type downloadState struct {
 	// scanGen the last begun; scanned says how far it has read.
 	scanning, scanGen int
 	scanned           *scanCount
+	// files is the file of each song in items, by its ID, for the player,
+	// which reads it off the window's goroutine; noteDownloads keeps it.
+	files atomic.Value // map[int64]string
 }
 
 // scanCount is how many of how many songs a scan has read, as it reads.

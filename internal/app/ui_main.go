@@ -131,6 +131,7 @@ func (a *app) view(c *ui.Context) {
 	a.downloadDeleteDialog(c)
 	a.settingsPanel(c)
 	a.globalGlassDialog(c)
+	a.signOutDialog(c)
 	a.accentDialog(c)
 	a.updateDialog(c)
 	a.whatsNewDialog(c)
@@ -317,6 +318,8 @@ func (a *app) load(r route) {
 		a.recent.sure = false
 	case pageCloud:
 		a.loadCloud(false)
+	case pageLocal:
+		a.loadLibrary(false)
 	case pageStyle:
 		if !a.style.loaded {
 			a.loadStyle()
@@ -382,6 +385,7 @@ func (a *app) sidebar(c *ui.Context, foreground float32) {
 				a.navItem(c, iconCharts, "排行榜", route{page: pageCharts})
 				a.navItem(c, iconPodcast, "播客", route{page: pagePodcasts})
 				a.navItem(c, iconDownload, "下载歌曲", route{page: pageDownloads})
+				a.navItem(c, iconLibrary, "本地音乐", route{page: pageLocal})
 				a.navItem(c, iconHistory, "最近播放", route{page: pageRecent})
 				if a.profile != nil {
 					a.navItem(c, iconCloud, "我的音乐云盘", route{page: pageCloud})
@@ -606,6 +610,8 @@ func (a *app) content(c *ui.Context, foreground float32) {
 			a.recentPage(c)
 		case pageCloud:
 			a.cloudPage(c)
+		case pageLocal:
+			a.localPage(c)
 		case pageStyle:
 			a.stylePage(c)
 		}

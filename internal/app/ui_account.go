@@ -177,6 +177,36 @@ func (a *app) signOut() {
 	go netease.Logout()
 }
 
+// askSignOut asks before signing out: next to the listener's own page in the
+// account menu, it was easy to press by mistake.
+func (a *app) askSignOut() {
+	a.signingOut = true
+	a.redraw()
+}
+
+// signOutDialog asks whether to sign out.
+func (a *app) signOutDialog(c *ui.Context) {
+	a.dialog(c, "sign-out", 0.35, &a.signingOut, func(panel ui.Element) {
+		a.pane(panel, 26, false)
+		ink := a.inkOn(false)
+		panel.Width(400).TextColor(ink.text)
+		name := ""
+		if a.profile != nil {
+			name = "“" + a.profile.Nickname + "”"
+		}
+		dialogHeader(c, ink, "退出登录", "确定退出网易云账号"+name+"吗？之后需要重新扫码或登录才能使用账号功能。", func() { a.signingOut = false })
+		dialogFooter(c, func() {
+			if settingButton(c.Key("cancel"), ink, "取消", nil, false, false).AutoFocus().Clicked() {
+				a.signingOut = false
+			}
+			if dangerButton(c.Key("ok"), "退出登录", iconSignOut, false).Clicked() {
+				a.signingOut = false
+				a.signOut()
+			}
+		})
+	})
+}
+
 // loginDialog shows the QR code to scan with the NetEase app on a phone.
 func (a *app) loginDialog(c *ui.Context) {
 	p := a.pal
@@ -408,9 +438,9 @@ func (a *app) accountMenu(c *ui.Context, row ui.Element) {
 			a.openSettings()
 		}
 		ui.Box(c).Height(0.5).Margin(4, 8).Background(pop.edge)
-		if a.menuItem(c, iconSignOut, "退出登录", "").Clicked() {
+		if a.menuItem(c, iconSignOut, "退出登录…", "").Clicked() {
 			a.accountOpen = false
-			a.signOut()
+			a.askSignOut()
 		}
 	})
 }

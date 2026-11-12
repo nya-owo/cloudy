@@ -362,7 +362,27 @@ func (a *app) playlistHeader(c *ui.Context, pl *netease.Playlist) {
 // trackRows lists tracks under a header, which scrolls with them; a click
 // plays the list from the track clicked.
 func (a *app) trackRows(c *ui.Context, tracks []netease.Track, covers bool, header func(c *ui.Context), footer ...func(c *ui.Context)) {
+	a.trackRowsGrouped(c, tracks, nil, covers, header, footer...)
+}
+
+// trackRowsGrouped lists tracks as trackRows does, each of groups, the
+// albums of a list sorted by album, under a title of its own.
+func (a *app) trackRowsGrouped(c *ui.Context, tracks []netease.Track, groups []albumGroup, covers bool, header func(c *ui.Context), footer ...func(c *ui.Context)) {
 	p := a.pal
+	// What each row of the list is, after the header: a song, by where it
+	// is in tracks, or the title of an album, as -1 - which.
+	items := make([]int, 0, len(tracks)+len(groups))
+	a.trackRow = a.trackRow[:0]
+	a.groupRow = a.groupRow[:0]
+	for g, i := 0, 0; i < len(tracks); i++ {
+		if g < len(groups) && groups[g].start == i {
+			a.groupRow = append(a.groupRow, len(items)+1)
+			items = append(items, -1-g)
+			g++
+		}
+		a.trackRow = append(a.trackRow, len(items)+1)
+		items = append(items, i)
+	}
 	a.shownTracks = tracks
 	batch := a.rowsBatchActive()
 	cur := a.pl.Current()
@@ -383,7 +403,7 @@ func (a *app) trackRows(c *ui.Context, tracks []netease.Track, covers bool, head
 	// scrolled away from its start or end has content under the bars.
 	a.underTop, a.underBottom = true, true
 	a.listOpened(c)
-	rows := len(tracks) + 1 + len(footer)
+	rows := len(items) + 1 + len(footer)
 	ui.List(c.Key(a.route), &a.trackList, rows, func(i int) {
 		if i == 0 {
 			ui.Column(c).Children(func() {
@@ -395,11 +415,15 @@ func (a *app) trackRows(c *ui.Context, tracks []netease.Track, covers bool, head
 		if i == rows-1 {
 			defer a.endMark(c)
 		}
-		if i > len(tracks) {
-			footer[i-len(tracks)-1](c)
+		if i > len(items) {
+			footer[i-len(items)-1](c)
 			return
 		}
-		i--
+		i = items[i-1]
+		if i < 0 {
+			a.albumTitle(c, groups[-1-i], -1-i == 0)
+			return
+		}
 		tr := &tracks[i]
 		playing := cur != nil && cur.ID == tr.ID
 		selected := batch && a.batch.selected[tr.ID]

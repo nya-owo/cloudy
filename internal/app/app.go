@@ -29,6 +29,7 @@ const (
 	pageRecent
 	pageCloud
 	pageStyle // the day's songs in the styles picked
+	pageLocal // the listener's own music, in the folders they chose
 )
 
 type route struct {
@@ -71,6 +72,7 @@ type app struct {
 	accountOpen  bool           // the dropdown of the account row shows
 	naming       nameDialog     // the name of a playlist asked for
 	deleting     deleteDialog   // whether to delete a playlist, asked
+	signingOut   bool           // whether to sign out, asked
 	liked        map[int64]bool // the songs the listener likes
 	toast        string         // a message to show once
 	toastAs      string         // what the toast says the state of, to take the place of the last
@@ -103,6 +105,8 @@ type app struct {
 	podcasts   map[int64]*podcastData
 	podcastTab *podcastTab // the podcasts tab's lists
 	trackList  ui.ListState
+	trackRow   []int // the row of trackList each song shown is at
+	groupRow   []int // the row of trackList each album's title is at, sorted by album
 	batch      batchSelection
 	// Where the page and the sidebar are scrolled, kept while Now Playing
 	// covers them, unbuilt.
@@ -226,6 +230,8 @@ type app struct {
 	// The songs saved to disk, the ones on their way there, and where both
 	// are kept.
 	dl downloadState
+	lib localLibrary
+	opened *openedFiles // the songs opened with Cloudy, coming in
 
 	restored     bool   // playback picked up where it was left
 	savedSession string // the session as last kept
@@ -302,6 +308,7 @@ func Run() error {
 		return nil
 	}
 	mygo.App.OnSecondInstance(func([]string, string) { a.showMain() })
+	a.listenForOpenedFiles()
 	moveOldData()
 	copyFormerData()
 	mygo.App.SetLanguages(appLanguage)
@@ -321,7 +328,9 @@ func Run() error {
 		a.pl.Quality = func() string { return a.settings.Quality }
 		a.pl.Normalize = func() bool { return a.settings.Normalize }
 		a.pl.Crossfade = a.crossfade
-		a.pl.Cache = newSongCache(a.settings.CacheMB)
+		a.pl.Cache = newSongCache(a.settings.CacheFolder, a.settings.CacheMB)
+		a.pl.LocalFile = a.downloadedFile
+		a.noteDownloadsAtStart()
 		a.pl.Listened = func(t netease.Track, played time.Duration, ended bool) {
 			a.listened(t, played, ended)
 			a.remember(t, played, ended)
@@ -373,6 +382,8 @@ func Run() error {
 		a.win.OnHide(a.syncDock)
 		// Shown or switched to the morning after, it shows the new day's.
 		a.win.OnFocus(a.freshenHome)
+		a.listenForDrops()
+		a.loadLibraryLater()
 		a.applyTray()
 		a.applyDeskLyrics()
 		// The thumbnail's buttons, and their glyphs as the taskbar turns

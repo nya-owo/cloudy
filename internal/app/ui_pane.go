@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/plugins/glass"
@@ -72,6 +73,57 @@ type paneMenu struct {
 	anchor   ui.Handle   // the control it opens under, for a window that changes size
 	anchored bool
 	closedAt time.Time // when a press outside closed it
+	query    string    // what a long list in it is searched for
+}
+
+// menuSearchFrom is how many rows a menu's list has for a search over it:
+// the playlists to add a song to, say.
+const menuSearchFrom = 9
+
+// menuSearchHeight is how tall the search of a long list is.
+const menuSearchHeight = 40
+
+// listed is the list of m that shows: its groups, or those of its sub.
+func (m *paneMenu) listed() [][]menuAction {
+	if m.sub != nil {
+		return m.sub.sub
+	}
+	return m.groups
+}
+
+// searchable reports whether m's list is long enough for a search.
+func (m *paneMenu) searchable() bool {
+	n := 0
+	for _, g := range m.listed() {
+		n += len(g)
+	}
+	return n >= menuSearchFrom
+}
+
+// matching keeps of groups the actions whose names have q, and the groups
+// with any left.
+func matching(groups [][]menuAction, q string) [][]menuAction {
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return groups
+	}
+	var out [][]menuAction
+	for _, g := range groups {
+		var kept []menuAction
+		for _, act := range g {
+			name := act.title
+			if name == "" {
+				name = act.label
+			}
+			if strings.Contains(strings.ToLower(name+" "+act.note), q) {
+				kept = append(kept, act)
+			}
+		}
+		if len(kept) > 0 {
+			out = append(out, kept)
+		}
+	}
+	return out
 }
 
 // menuWidth is how wide a menu is; the heights are what its rows take, to
@@ -82,28 +134,51 @@ const (
 	menuLineHeight = 9
 	menuHeadHeight = 66
 	menuListHeight = 300
+	menuTallest    = 520 // the most a menu's own groups take before they scroll
 )
 
-// height returns how tall m shows.
-func (m *paneMenu) height() float32 {
-	rows := func(groups [][]menuAction) float32 {
-		h := float32(0)
-		for i, g := range groups {
-			if i > 0 {
-				h += menuLineHeight
-			}
-			h += float32(len(g)) * menuRowHeight
+// menuRows is how tall groups are in a menu.
+func menuRows(groups [][]menuAction) float32 {
+	h := float32(0)
+	for i, g := range groups {
+		if i > 0 {
+			h += menuLineHeight
 		}
-		return h
+		h += float32(len(g)) * menuRowHeight
+	}
+	return h
+}
+
+// height returns how tall m shows in a window winH tall.
+func (m *paneMenu) height(winH float32) float32 {
+	search := float32(0)
+	if m.searchable() {
+		search = menuSearchHeight
 	}
 	if m.sub != nil {
-		return 12 + menuRowHeight + menuLineHeight + min(rows(m.sub.sub), menuListHeight)
+		return 12 + menuRowHeight + menuLineHeight + search + min(menuRows(m.sub.sub), menuListHeight)
 	}
-	h := 12 + rows(m.groups)
+	return m.chrome() + search + min(menuRows(m.groups), m.room(winH))
+}
+
+// chrome is how tall a menu is around its groups: its padding, and its head
+// if it has one.
+func (m *paneMenu) chrome() float32 {
+	h := float32(12)
 	if m.head != nil {
 		h += menuHeadHeight
 	}
 	return h
+}
+
+// room is how tall the groups of m may be before they scroll: a long menu,
+// such as the playlists to add a song to, keeps in the window.
+func (m *paneMenu) room(winH float32) float32 {
+	room := winH - 16 - m.chrome()
+	if m.searchable() {
+		room -= menuSearchHeight
+	}
+	return max(min(room, menuTallest), 3*menuRowHeight)
 }
 
 // openMenu opens a menu at x, y, rising from up where there is no room below.
@@ -156,7 +231,7 @@ func (a *app) menuOverlay(c *ui.Context) {
 	w, h := c.Size()
 	ink := a.inkOn(m.onDark)
 	x, y := min(max(m.x, 8), w-menuWidth-8), m.y
-	if tall := m.height(); y+tall > h-8 {
+	if tall := m.height(h); y+tall > h-8 {
 		y = max(m.up-tall, 8)
 	}
 	ui.Overlay(c, func() {
@@ -172,22 +247,50 @@ func (a *app) menuOverlay(c *ui.Context) {
 		panel.Children(func() {
 			if sub := m.sub; sub != nil {
 				if a.menuRow(c.Key("back"), menuAction{label: "返回", title: sub.label, icon: iconBack}, false, ink).Clicked() {
-					m.sub = nil
+					m.sub, m.query = nil, ""
 				}
 				menuLine(c.Key("back-line"), ink)
-				ui.Scroll(c.Key("menu-list")).MaxHeight(menuListHeight).Gap(1).Children(func() { a.menuGroups(c, sub.sub, ink) })
+				a.menuSearch(c, ink)
+				ui.Scroll(c.Key("menu-list")).MaxHeight(menuListHeight).Gap(1).Children(func() { a.menuGroups(c, matching(sub.sub, m.query), ink) })
 				return
 			}
 			if m.head != nil {
 				m.head(c, ink)
 				menuLine(c.Key("head-line"), ink)
 			}
-			a.menuGroups(c, m.groups, ink)
+			a.menuSearch(c, ink)
+			groups := matching(m.groups, m.query)
+			if room := m.room(h); menuRows(m.groups) > room {
+				ui.Scroll(c.Key("menu-groups")).MaxHeight(room).Gap(1).Children(func() { a.menuGroups(c, groups, ink) })
+			} else {
+				a.menuGroups(c, groups, ink)
+			}
 		})
 		if panel.PressedOutside() || panel.OverlayShortcut(0, ui.KeyEscape) {
-			m.open, m.sub, m.closedAt = false, nil, time.Now()
+			m.open, m.sub, m.query, m.closedAt = false, nil, "", time.Now()
 		}
 	})
+}
+
+// menuSearch searches a long list of the menu open, as of the playlists to
+// add a song to; a list that finds nothing says so.
+func (a *app) menuSearch(c *ui.Context, ink paneInk) {
+	m := &a.menu
+	if !m.searchable() {
+		return
+	}
+	field := ui.Row(c.Key("menu-search-row")).Height(32).Margin(0, 2, 6, 2).PaddingX(10).Gap(7).Radius(14).AlignItems(ui.Center).Background(ink.hover)
+	field.Children(func() {
+		ui.Icon(c, iconSearch).Size(13, 13).TextColor(ink.muted)
+		ui.TextInputBase(c.Key("menu-search"), &m.query).AutoFocus().Grow(1).MinWidth(0).
+			Placeholder("搜索").FontSize(12.5).Label("搜索")
+		if m.query != "" && iconButton(c.Key("menu-search-clear"), iconX, 11, ink.muted, "清除搜索").Size(20, 20).Clicked() {
+			m.query = ""
+		}
+	})
+	if len(matching(m.listed(), m.query)) == 0 {
+		ui.Text(c.Key("menu-search-none"), "没有找到").FontSize(12.5).TextColor(ink.muted).Padding(10, 12)
+	}
 }
 
 // menuGroups lists groups in the menu, a line between them.
@@ -199,9 +302,9 @@ func (a *app) menuGroups(c *ui.Context, groups [][]menuAction, ink paneInk) {
 		for _, act := range group {
 			if a.menuRow(c, act, act.sub != nil, ink).Clicked() {
 				if act.sub != nil {
-					a.menu.sub = &act
+					a.menu.sub, a.menu.query = &act, ""
 				} else {
-					a.menu.open, a.menu.sub = false, nil
+					a.menu.open, a.menu.sub, a.menu.query = false, nil, ""
 					act.do()
 				}
 			}

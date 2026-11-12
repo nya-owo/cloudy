@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -544,7 +545,7 @@ func (a *app) settingsAccountPage(k *settingsKit) {
 					ui.Text(c, "已登录网易云音乐").FontSize(12.5).TextColor(ink.muted)
 				})
 				if k.button("logout", "退出登录", iconSignOut, false, true).Clicked() {
-					a.signOut()
+					a.askSignOut()
 				}
 			})
 		})
@@ -1023,6 +1024,37 @@ func (a *app) settingsStoragePage(k *settingsKit) {
 				})
 		})
 	})
+	k.group("本地音乐", func() {
+		for _, dir := range s.LocalFolders {
+			k.row(filepath.Base(dir), dir, func() {
+				if k.button("local-open-"+dir, "打开", iconExternal, false, false).Clicked() {
+					mygo.Shell.OpenPath(dir)
+				}
+				if k.button("local-remove-"+dir, "移除", nil, false, true).Clicked() {
+					a.removeLibraryFolder(dir)
+				}
+			})
+		}
+		k.row("添加文件夹", "读取文件夹和子文件夹里的 MP3、FLAC，显示在「本地音乐」，文件夹有变化时自动更新", func() {
+			if k.button("local-add", "添加…", iconPlus, false, false).Clicked() {
+				a.pickLibraryFolder()
+			}
+		})
+		if canRegisterOpenWith {
+			k.row("用 Cloudy 打开音乐文件", "加入 MP3、FLAC 的「打开方式」；要设为默认播放器，请在系统的默认应用设置里选择 Cloudy", func() {
+				if k.button("open-with", "添加到打开方式", nil, false, false).Clicked() {
+					if err := registerOpenWith(); err != nil {
+						a.toast = "添加失败：" + err.Error()
+					} else {
+						a.toast = "已添加：在音乐文件上右键「打开方式」就能选择 Cloudy"
+					}
+				}
+				if k.button("default-apps", "默认应用设置", iconExternal, false, false).Clicked() {
+					mygo.Shell.OpenExternal("ms-settings:defaultapps")
+				}
+			})
+		}
+	})
 	k.group("缓存", func() {
 		k.row("歌曲缓存", "听过的歌保存在本机，再听不用等也不耗流量；"+a.cacheUsage(), func() {
 			labels := make([]string, len(cacheLimits))
@@ -1038,6 +1070,32 @@ func (a *app) settingsStoragePage(k *settingsKit) {
 				a.changed()
 				a.applyCacheLimit()
 			})
+		})
+		where := songCacheDir(s.CacheFolder)
+		k.block("缓存位置 缓存文件夹 路径 "+where, func() {
+			line := ink.line
+			ui.Row(c).Padding(11, 20).Gap(20).AlignItems(ui.Center).MinHeight(62).
+				Draw(func(p *ui.Painter, b ui.Rect) {
+					p.Fill(ui.Rect{X: b.X + 20, Y: b.Y, W: b.W - 40, H: 1}, line, 0)
+				}).
+				Children(func() {
+					ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(4).Children(func() {
+						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+							ui.Text(c, "缓存位置").FontSize(14).FontWeight(500)
+							infoTip(c, "系统盘空间不够时，可以把缓存放到别的磁盘；更换后原来的缓存会被清除", ink)
+						})
+						ui.Text(c, where).FontSize(12).Font("Cascadia Mono, Consolas, monospace").TextColor(ink.muted).SingleLine()
+					})
+					if s.CacheFolder != "" && k.button("cache-default", "恢复默认", nil, false, false).Clicked() {
+						a.setCacheFolder("")
+					}
+					if k.button("cache-browse", "更改…", nil, false, false).Clicked() {
+						a.pickCacheFolder()
+					}
+					if k.button("cache-open", "打开", iconExternal, false, false).Clicked() {
+						a.openCacheFolder()
+					}
+				})
 		})
 		k.row("清除缓存", "删除保存在本机的全部缓存歌曲，下载的歌曲不受影响", func() {
 			if k.button("clear-cache", "清除", nil, a.cacheUsed <= 0, true).Clicked() {

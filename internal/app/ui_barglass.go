@@ -36,6 +36,16 @@ func (a *app) interfaceGlass(dark bool) barGlass {
 	return barGlass{dark: dark, clear: float32(a.settings.GlassClear), bend: float32(a.settings.GlassBend), surface: true, translucent: true}
 }
 
+// floatGlass is the glass of the bars floating over the page: the player bar
+// and the batch bar. Under the cover background, the page is translucent
+// over the window's material, so the glass has to take what it shows through
+// as translucent too: read as opaque, the clear parts of the page are black,
+// and in light mode the middle of the bar went dark.
+func (a *app) floatGlass(dark bool) barGlass {
+	return barGlass{dark: dark, clear: float32(a.settings.GlassClear), bend: float32(a.settings.GlassBend),
+		translucent: a.settings.GlobalGlass || a.settings.mainGlass()}
+}
+
 // How the glass of the bar looks, whatever the listener chose.
 const (
 	barGlassSpread  = 0.05 // how far apart red and blue bend, of the bend

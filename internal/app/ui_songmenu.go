@@ -31,8 +31,14 @@ func (a *app) songActions(tr *netease.Track, pid int64) [][]menuAction {
 	}
 	a.loadDownloads(false)
 	save := menuAction{label: "下载到本机", icon: iconDownload, do: func() { a.startDownload(song) }}
-	if tr.LocalPath != "" || a.downloaded(tr.ID) {
+	if tr.LocalPath != "" && a.inDownloads(tr.LocalPath) || tr.LocalPath == "" && a.downloaded(tr.ID) {
 		save = menuAction{label: "从本地删除", icon: iconTrash, do: func() { a.confirmDeleteDownload(song) }}
+	} else if tr.LocalPath != "" {
+		// A file of the listener's own music, which NetEase knows.
+		save = menuAction{label: "下载到本机", icon: iconDownload, do: func() {
+			song.LocalPath = ""
+			a.startDownload(song)
+		}}
 	}
 	groups := [][]menuAction{
 		{next},

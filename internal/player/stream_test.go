@@ -318,7 +318,7 @@ func TestCacheKeepsOnlyKnownLevels(t *testing.T) {
 	if len(outside) != 0 {
 		t.Errorf("wrote %v outside the cache", outside)
 	}
-	if songs := c.songs(); len(songs) != 0 {
+	if songs := songsIn(c.Dir()); len(songs) != 0 {
 		t.Errorf("kept %v", songs)
 	}
 }
