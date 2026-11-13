@@ -53,16 +53,6 @@ func (a *app) view(c *ui.Context) {
 		c.Root().Background(ui.Transparent)
 	}
 	root := ui.Box(c).Fill()
-	if !c.Focused(a.searchBox) && !c.Focused(a.filterBox) && !c.Focused(a.dl.box) && !c.Focused(a.mineView.box) && !c.Focused(a.settingsView.searchBox) {
-		// Space plays and pauses wherever the focus is, as in Music. On
-		// the container around everything, it comes before a button the
-		// pointer focused, which would take Space as a click; on the
-		// window, it would come after.
-		root.OnShortcut(0, ui.KeySpace, a.pl.TogglePlay)
-		// And where nothing has the focus, as once Now Playing covers the
-		// button that had it.
-		c.OnShortcut(0, ui.KeySpace, a.pl.TogglePlay)
-	}
 	npOpen, npSettled := a.npState(c)
 	a.npK = a.npProgress(root, npOpen)
 	foreground := float32(1)
@@ -75,7 +65,7 @@ func (a *app) view(c *ui.Context) {
 	root.Children(func() {
 		page := ui.Row(c).Fill().AlignItems(ui.Stretch).Opacity(background)
 		page.Children(func() {
-			if npOpen && npSettled {
+			if npOpen && (npSettled || a.npK == 1) {
 				// Covered by Now Playing: not built, which would cost each
 				// of its frames as much again as the stage itself. Where
 				// it is scrolled is the app's (pageScroll, navScroll,
@@ -148,6 +138,24 @@ func (a *app) view(c *ui.Context) {
 	a.downloadQueueDialog(c)
 	a.uploadQueueDialog(c)
 	a.paneToasts(c)
+	// A retained Handle may stay focused after its input is omitted. Check
+	// this build, after the page and foreground panels have bound their inputs.
+	editing := false
+	for _, field := range []ui.Handle{a.searchBox, a.filterBox, a.dl.box, a.mineView.box, a.settingsView.searchBox} {
+		if c.Focused(field) && c.Resolve(field).Valid() {
+			editing = true
+		}
+	}
+	if !editing && a.keys.setup.recording == "" {
+		// Space plays and pauses wherever the focus is, as in Music. On
+		// the container around everything, it comes before a button the
+		// pointer focused, which would take Space as a click; on the
+		// window, it would come after.
+		root.OnShortcut(0, ui.KeySpace, a.pl.TogglePlay)
+		// And where nothing has the focus, as once Now Playing covers the
+		// button that had it.
+		c.OnShortcut(0, ui.KeySpace, a.pl.TogglePlay)
+	}
 	if a.toast != "" {
 		if a.toastAs != "" {
 			// What it says replaces what the last of its kind said, in
@@ -379,6 +387,12 @@ func (a *app) sidebar(c *ui.Context, foreground float32) {
 	// Where nothing in it takes the press, the sidebar moves the window, as
 	// the title bar it reaches up into would.
 	ui.Column(c).Fill().Padding(top, 14, 14, 14).Gap(4).DragWindow().Opacity(foreground).Children(func() {
+		if foreground == 0 {
+			// Keep the sidebar's box and window drag region, but not its
+			// fully transparent controls. Scroll and collapsed groups live
+			// in app state, as when Now Playing covers the entire page.
+			return
+		}
 		a.searchField(c)
 
 		nav := ui.Box(c.Key("nav-box")).Grow(1).MinHeight(0).Margin(0, -6)
@@ -587,6 +601,13 @@ func (a *app) content(c *ui.Context, foreground float32) {
 	// Keyed by its route, the page before leaves as this one comes.
 	page := ui.Box(c.Key(a.route)).Absolute().Top(0).Left(0).Right(0).Bottom(0).Opacity(foreground)
 	a.pageMotion(page)
+	if foreground == 0 {
+		// Global glass has already faded this page out. Keep its keyed
+		// shell and transition, but do not build invisible rows and text
+		// on every frame of Now Playing's reveal. The app owns scrolling
+		// and selection, just as when the settled playback view covers it.
+		return
+	}
 	if url := a.pageArt(); url != "" && !a.settings.mainGlass() {
 		a.pageAura(page, url)
 	}

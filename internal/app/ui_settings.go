@@ -459,12 +459,8 @@ func (a *app) settingsBody(c *ui.Context) {
 		key, scroll, label = "search", &a.settingsView.searchScroll, "搜索"
 	}
 	viewport := ui.Box(c.Key("settings-viewport")).Grow(1).Shrink(1).MinWidth(0)
-	fade := easeRange(scroll.Y, 0, 24)
-	if fade > 0 || a.settings.GlobalGlass {
-		// Keep one scratch layer for the settings, while each category's
-		// scroll keeps its own input state and position.
-		viewport.Effect(scrollEdgeFade{depth: 44, top: fade})
-	}
+	// Keep settings text on the final target. An edge Effect resamples the
+	// entire viewport, softening even the text well outside its fade band.
 	viewport.Children(func() {
 		ui.Scroll(c.Key(key)).Label(label+"设置项").TrackScroll(scroll).Fill().Padding(0, 30, 30, 18).Children(func() {
 			if k.query == "" {
