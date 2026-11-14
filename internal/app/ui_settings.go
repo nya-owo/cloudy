@@ -935,7 +935,7 @@ func (a *app) settingsEffectsPage(k *settingsKit) {
 		k.row("液态玻璃播放栏", "播放栏化作悬浮的玻璃胶囊，透出并折射其下的内容", func() {
 			part("liquid-glass", "液态玻璃播放栏", &s.LiquidGlass, a.leavePowerSaver)
 		})
-		k.row("界面玻璃", "菜单、弹窗和设置面板使用玻璃材质，内部卡片保持平面", func() {
+		k.row("界面玻璃", "菜单（含托盘菜单）、弹窗和设置面板使用玻璃材质，内部卡片保持平面", func() {
 			part("glass-panels", "界面玻璃", &s.GlassPanels, a.leavePowerSaver)
 		})
 		refractive := s.playerGlass() || s.GlobalGlass

@@ -1,10 +1,12 @@
 package app
 
 import (
+	"image"
 	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/audio"
@@ -39,7 +41,9 @@ func trayPopupFixture(t *testing.T) (*app, *ui.Tester, *[]*testTrayPopup) {
 	a.settings.DeskX, a.settings.DeskY = 1, 1
 	a.tray = &mygo.Tray{}
 	all := []*testTrayPopup{}
-	realFactory := newTrayPopupWindow
+	realFactory, realGlass, realHost := newTrayPopupWindow, trayGlass, trayHost
+	trayGlass = func(*app) bool { return false }
+	trayHost = func() (uintptr, bool) { return 0, false }
 	newTrayPopupWindow = func(opts mygo.FlyoutOptions, close func(*mygo.CloseEvent)) trayPopupWindow {
 		if opts.Tray != a.tray || opts.Parent != nil || !opts.Focusable || !opts.Hidden || opts.Shadow || opts.Content == nil {
 			t.Fatal("menu must be an independent focusable tray flyout with its own content")
@@ -48,7 +52,7 @@ func trayPopupFixture(t *testing.T) (*app, *ui.Tester, *[]*testTrayPopup) {
 		all = append(all, w)
 		return w
 	}
-	t.Cleanup(func() { newTrayPopupWindow = realFactory })
+	t.Cleanup(func() { newTrayPopupWindow, trayGlass, trayHost = realFactory, realGlass, realHost })
 	tt := ui.NewTester(func(c *ui.Context) {
 		a.pal = paletteFor(c.Theme())
 		if a.trayPopup != nil {
@@ -238,5 +242,59 @@ func TestTrayPopupLifecycle(t *testing.T) {
 	a.toggleTrayPopup()
 	if a.trayPopup != nil || len(*windows) != 4 {
 		t.Fatal("quitting opened a new popup")
+	}
+}
+
+// With 界面玻璃 the menu is the app's glass over a copy of the desktop under
+// it; from the overflow of hidden icons it does not take the keyboard, which
+// would fold the overflow away from it.
+func TestTrayPopupGlass(t *testing.T) {
+	a := newTestApp()
+	a.settings = defaultSettings()
+	a.tray = &mygo.Tray{}
+	var got mygo.FlyoutOptions
+	realFactory, realGlass, realHost, realCapture := newTrayPopupWindow, trayGlass, trayHost, trayCaptureBehind
+	t.Cleanup(func() {
+		newTrayPopupWindow, trayGlass, trayHost, trayCaptureBehind = realFactory, realGlass, realHost, realCapture
+	})
+	trayGlass = func(*app) bool { return true }
+	trayHost = func() (uintptr, bool) { return 1, true }
+	trayCaptureBehind = func() func(uintptr) image.Image {
+		return func(uintptr) image.Image { return image.NewRGBA(image.Rect(0, 0, trayPopupWidth, trayPopupHeight)) }
+	}
+	newTrayPopupWindow = func(opts mygo.FlyoutOptions, close func(*mygo.CloseEvent)) trayPopupWindow {
+		got = opts
+		return &testTrayPopup{close: close}
+	}
+	a.toggleTrayPopup()
+	if !a.trayPopupGlass || got.Focusable || got.Shadow || got.Vibrancy != "" || a.trayBackdrop == nil {
+		t.Fatalf("overflow glass tray menu options: %+v", got)
+	}
+	if got.Gap != trayPopupGap-trayPopupMargin {
+		t.Fatalf("card is %d DIPs from the icon", got.Gap+trayPopupMargin)
+	}
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.pal = paletteFor(c.Theme())
+		if a.trayPopup != nil {
+			a.trayPopupView(c)
+		}
+	}, trayPopupWidth, trayPopupHeight)
+	tt.Frame()
+	if _, ok := tt.Find("下一首"); !ok {
+		t.Fatal("glass menu lost its commands")
+	}
+	a.closeTrayPopup()
+	if a.trayBackdrop != nil {
+		t.Fatal("closed menu kept its copy of the desktop")
+	}
+	a.toggleTrayPopup()
+	if a.trayPopup == nil {
+		t.Fatal("a right click after closing did not reopen the menu")
+	}
+	a.closeTrayPopup()
+	a.trayPopupClosed = time.Now() // as a press outside, on the icon, closes it
+	a.toggleTrayPopup()
+	if a.trayPopup != nil {
+		t.Fatal("a right click right after a dismissal reopened the menu")
 	}
 }

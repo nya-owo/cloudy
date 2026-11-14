@@ -52,6 +52,13 @@ type app struct {
 	pal   palette
 
 	trayPopup trayPopupWindow // Windows' independent, short-lived tray menu
+	// trayPopupGlass is whether it is glass, over trayBackdrop, the desktop
+	// under it; trayPopupDone stops watching for a press outside it, and
+	// trayPopupClosed is when a press outside last closed it.
+	trayPopupGlass  bool
+	trayBackdrop    *ui.Bitmap
+	trayPopupDone   chan struct{}
+	trayPopupClosed time.Time
 
 	// thumbsAt is what the taskbar thumbnail shows (thumbbar.go), and
 	// thumbDark whether the taskbar is dark.
