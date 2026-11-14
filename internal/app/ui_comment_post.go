@@ -257,7 +257,7 @@ func commentBadge(n int) string {
 
 // barCommentButton is commentCountButton in the player bar, by the heart:
 // a click opens Now Playing on the comments.
-func (a *app) barCommentButton(c *ui.Context, tr *netease.Track, size float32, color ui.Color) ui.Element {
+func (a *app) barCommentButton(c *ui.Context, tr *netease.Track, size float32, color ui.Color, showCount bool) ui.Element {
 	if !commentable(tr) {
 		return ui.Box(c)
 	}
@@ -265,13 +265,21 @@ func (a *app) barCommentButton(c *ui.Context, tr *netease.Track, size float32, c
 	if cs := a.commentsFor(tr); cs.loaded {
 		n = cs.total
 	}
-	wrap := ui.Box(c).Width(size + max(40, size*1.6)).Height(size + 16).AlignItems(ui.Start)
+	width := size + 16
+	if showCount {
+		width = size + max(40, size*1.6)
+	}
+	wrap := ui.Box(c).Width(width).Height(size + 16).AlignItems(ui.Start)
 	wrap.Children(func() {
-		if iconButton(c.Key("comments"), iconComment, size*0.9, color, "评论").Clicked() {
+		button := iconButton(c.Key("comments"), iconComment, size*0.9, color, "评论")
+		if cs := a.commentsFor(tr); cs.loaded {
+			button.Tooltip(fmt.Sprintf("%d 条评论", cs.total))
+		}
+		if button.Clicked() {
 			a.npPane = paneComments
 			a.nowPlaying = true
 		}
-		if n > 0 {
+		if n > 0 && showCount {
 			ui.Text(c.Key("comment-count"), commentBadge(n)).FontSize(max(10, size*0.46)).FontWeight(700).FontFeatures("tnum").
 				TextColor(color).Absolute().Top(-1).Left(8 + size*0.84).SingleLine().PassThrough()
 		}

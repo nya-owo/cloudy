@@ -96,6 +96,7 @@ func (a *app) npCover(c *ui.Context, tr *netease.Track, art *artwork, size float
 		cs.off = ui.Point{X: -float32(dir) * far}
 	}
 	wrap := ui.Box(c.Key(coverKey{tr.ID, cs.gen})).Size(size, size).AlignSelf(ui.Start).Label("专辑封面")
+	a.coverContext(wrap, tr)
 	a.npSpot.cover = wrap.LayoutBounds()
 	a.flown(wrap)
 	entering := cs.enter != 0

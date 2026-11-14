@@ -44,6 +44,8 @@ type route struct {
 // app is the state both windows show. Everything in it is read and changed
 // on the main thread: by the views, and by goroutines through post.
 type app struct {
+	savingCover bool // a cover fetch or save dialog is already in progress
+
 	win   *mygo.Window
 	notch *notch
 	tray  *mygo.Tray // the icon in the menu bar or notification area, while it shows
