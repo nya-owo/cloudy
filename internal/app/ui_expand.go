@@ -44,6 +44,7 @@ func (a *app) motionLevel(c *ui.Context) int {
 type flightSpot struct {
 	cover, title, scrub, play ui.Rect
 	radius                    float32  // of the cover
+	tilt                      ui.Point // the cover's current depth tilt
 	track, fill, smoke        ui.Color // of the progress
 }
 
@@ -78,6 +79,7 @@ func (a *app) npFlying() bool {
 // those of the view are there, they are all there is of them. So they look
 // at either end as what they take over from does.
 func (a *app) flights(c *ui.Context, tr *netease.Track, k float32) {
+	a.npFlightShadow(c, k)
 	if !a.npFlying() {
 		return
 	}
@@ -94,8 +96,7 @@ func (a *app) flights(c *ui.Context, tr *netease.Track, k float32) {
 	if bmp == nil {
 		bmp = bitmap(a.art.get(netease.Sized(tr.Album.PicURL, 120), false))
 	}
-	box := ui.Box(c.Key("fly-cover")).Absolute().Left(cover.X).Top(cover.Y).Size(cover.W, cover.H).Radius(radius).Opacity(shown).
-		Shadow(0, lerp(2, 30, k), lerp(8, 60, k), -12*k, a.pal.cardShade.Mix(ui.RGBA(0, 0, 0, 0.55), k))
+	box := ui.Box(c.Key("fly-cover")).Absolute().Left(cover.X).Top(cover.Y).Size(cover.W, cover.H).Radius(radius).Opacity(shown)
 	if a.spins() {
 		// Unwinding the short way, from however the record stood.
 		box.Rotate(float32(math.Remainder(float64(a.spin.at(c.Now())), 360)) * (1 - k))
@@ -117,7 +118,8 @@ func (a *app) flights(c *ui.Context, tr *netease.Track, k float32) {
 		}
 	}
 	if to.scrub.W > 0 {
-		a.flyScrub(c, lerpRect(from.scrub, to.scrub, k), from.track.Mix(to.track, k), from.fill.Mix(to.fill, k), from.smoke.Mix(to.smoke, k), k, shown)
+		// The gray track keeps the playback view's color throughout its flight.
+		a.flyScrub(c, lerpRect(from.scrub, to.scrub, k), to.track, from.fill.Mix(to.fill, k), from.smoke.Mix(to.smoke, k), k, shown)
 	}
 	if to.play.W > 0 {
 		r := lerpRect(from.play, to.play, k)
@@ -130,8 +132,34 @@ func (a *app) flights(c *ui.Context, tr *netease.Track, k float32) {
 	}
 }
 
+// npFlightShadow owns the shadow for the whole flight, independently of the
+// two images fading into one another. Keep its pose alive even at rest, so a
+// pause or hover spring has the same history as the real cover's pose. At the
+// endpoint its caster, tilt and scaled shadow meet that original cover exactly.
+func (a *app) npFlightShadow(c *ui.Context, k float32) {
+	from, to, s := a.barSpot, a.npSpot, a.npCoverScale
+	if from.cover.W <= 0 || to.cover.W <= 0 || s <= 0 {
+		return
+	}
+	// Scaling this caster by s follows the image's existing flight rectangle.
+	start := from.cover
+	start = ui.Rect{X: start.X + start.W*(1-1/s)/2, Y: start.Y + start.H*(1-1/s)/2, W: start.W / s, H: start.H / s}
+	r := lerpRect(start, to.cover, k)
+	shadow := ui.Box(c.Key("fly-cover-shadow")).Absolute().Left(r.X).Top(r.Y).Size(r.W, r.H).
+		Radius(lerp(from.radius/s, 14, k)).PassThrough().Opacity(b2f(a.npFlying())).
+		Shadow(0, 30, 60, -12, ui.RGBA(0, 0, 0, 0.55))
+	if a.spins() {
+		shadow.Rotate(float32(math.Remainder(float64(a.spin.at(c.Now())), 360)) * (1 - k))
+	}
+	if math.Abs(float64(to.tilt.X))+math.Abs(float64(to.tilt.Y)) > 0.05 {
+		shadow.RotateX(to.tilt.X).RotateY(to.tilt.Y).Perspective(900)
+	}
+	shadow.AnimatePose(ui.Pose{Scale: s}, ui.Animation{Spring: ui.SpringOptions{Duration: 600 * time.Millisecond, Bounce: 0.25}})
+}
+
 // flyScrub draws the progress on its way at r, as a scrubber draws it.
 func (a *app) flyScrub(c *ui.Context, r ui.Rect, track, fill, smoke ui.Color, k, shown float32) {
+	track = flyScrubTrack(track, k)
 	pl, st := a.pl, &a.npScrub
 	dur := pl.Duration().Seconds()
 	at := float32(0)
@@ -162,6 +190,17 @@ func (a *app) flyScrub(c *ui.Context, r ui.Rect, track, fill, smoke ui.Color, k,
 			p.Fill(played, fill, thick/2)
 		}
 	})
+}
+
+// flyScrubTrack hands the gray track to the real scrubber before the flight
+// fades. Alpha-over must stay at a, not rise to a+a*(1-a) as both tracks show:
+// a*land + flight*(1-a*land) = a. The played fill keeps its original fade.
+func flyScrubTrack(track ui.Color, k float32) ui.Color {
+	land := easeRange(k, 1-flightEnd, 1-flightTouch)
+	if land == 1 {
+		return track.Alpha(0)
+	}
+	return track.Alpha((1 - land) / (1 - float32(track.A)/255*land))
 }
 
 // flown hides e, what stays in the view, until the flight that draws it is

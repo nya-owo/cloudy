@@ -64,16 +64,27 @@ func (a *app) applyTray() {
 		if runtime.GOOS == "darwin" {
 			icon, template = trayTemplate, true
 		}
-		t, err := mygo.NewTray(mygo.TrayOptions{ID: "cloudmusic", Icon: icon, IconIsTemplate: template, ToolTip: mygo.App.Name(), Menu: a.trayMenu()})
+		menu := a.trayMenu()
+		if runtime.GOOS == "windows" {
+			menu = nil // Right click belongs to the independent native-UI flyout.
+		}
+		t, err := mygo.NewTray(mygo.TrayOptions{ID: "cloudmusic", Icon: icon, IconIsTemplate: template, ToolTip: mygo.App.Name(), Menu: menu})
 		if err != nil {
 			log.Println("tray:", err)
 			return
 		}
 		// Windows' left click, where the right one opens the menu.
-		t.OnClick(a.showMain)
+		t.OnClick(func() {
+			a.closeTrayPopup()
+			a.showMain()
+		})
 		t.OnAppearanceChange(func() { a.post(a.readTaskbarDark) })
 		a.tray = t
+		if runtime.GOOS == "windows" {
+			t.OnRightClick(a.toggleTrayPopup)
+		}
 	case !show && a.tray != nil:
+		a.closeTrayPopup()
 		a.tray.Destroy()
 		a.tray = nil
 	}

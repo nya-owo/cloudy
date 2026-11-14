@@ -51,6 +51,15 @@ type app struct {
 	pl    *player.Player
 	pal   palette
 
+	trayPopup trayPopupWindow // Windows' independent, short-lived tray menu
+	// trayPopupGlass is whether it is glass, over trayBackdrop, the desktop
+	// under it; trayPopupDone stops watching for a press outside it, and
+	// trayPopupClosed is when a press outside last closed it.
+	trayPopupGlass  bool
+	trayBackdrop    *ui.Bitmap
+	trayPopupDone   chan struct{}
+	trayPopupClosed time.Time
+
 	// thumbsAt is what the taskbar thumbnail shows (thumbbar.go), and
 	// thumbDark whether the taskbar is dark.
 	thumbsAt  *thumbState
@@ -265,6 +274,9 @@ func (a *app) post(fn func()) {
 }
 
 func (a *app) redraw() {
+	if a.trayPopup != nil {
+		a.trayPopup.Invalidate()
+	}
 	if a.win != nil {
 		a.win.Invalidate()
 	}
@@ -441,6 +453,7 @@ func Run() error {
 	// Windows leaves an icon in the notification area after its app until
 	// the pointer passes over it.
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		a.closeTrayPopup()
 		if a.tray != nil {
 			a.tray.Destroy()
 		}

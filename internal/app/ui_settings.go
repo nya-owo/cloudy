@@ -459,12 +459,8 @@ func (a *app) settingsBody(c *ui.Context) {
 		key, scroll, label = "search", &a.settingsView.searchScroll, "搜索"
 	}
 	viewport := ui.Box(c.Key("settings-viewport")).Grow(1).Shrink(1).MinWidth(0)
-	fade := easeRange(scroll.Y, 0, 24)
-	if fade > 0 || a.settings.GlobalGlass {
-		// Keep one scratch layer for the settings, while each category's
-		// scroll keeps its own input state and position.
-		viewport.Effect(scrollEdgeFade{depth: 44, top: fade})
-	}
+	// Keep settings text on the final target. An edge Effect resamples the
+	// entire viewport, softening even the text well outside its fade band.
 	viewport.Children(func() {
 		ui.Scroll(c.Key(key)).Label(label+"设置项").TrackScroll(scroll).Fill().Padding(0, 30, 30, 18).Children(func() {
 			if k.query == "" {
@@ -905,7 +901,7 @@ func (a *app) settingsEffectsPage(k *settingsKit) {
 		k.row("液态玻璃播放栏", "播放栏化作悬浮的玻璃胶囊，透出并折射其下的内容", func() {
 			part("liquid-glass", "液态玻璃播放栏", &s.LiquidGlass, a.leavePowerSaver)
 		})
-		k.row("界面玻璃", "菜单、弹窗和设置面板使用玻璃材质，内部卡片保持平面", func() {
+		k.row("界面玻璃", "菜单（含托盘菜单）、弹窗和设置面板使用玻璃材质，内部卡片保持平面", func() {
 			part("glass-panels", "界面玻璃", &s.GlassPanels, a.leavePowerSaver)
 		})
 		refractive := s.playerGlass() || s.GlobalGlass

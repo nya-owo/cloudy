@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,6 +10,110 @@ import (
 	"netease-music-mygo/internal/lyrics"
 	"netease-music-mygo/internal/netease"
 )
+
+// transitionPlaylist supplies enough rows to expose work on the hidden page.
+func transitionPlaylist() *app {
+	a := newTestApp()
+	a.settings = defaultSettings()
+	a.settings.GlobalGlass = true
+	a.settings.BarSpin = false
+	tracks := make([]netease.Track, 200)
+	for i := range tracks {
+		tracks[i] = netease.Track{ID: int64(i + 1), Name: fmt.Sprintf("Track %03d", i+1), Duration: 200000}
+	}
+	a.route = route{page: pagePlaylist, id: 7}
+	a.playlists[7] = &netease.Playlist{ID: 7, Name: "Playlist", Tracks: tracks, TrackCount: len(tracks)}
+	a.pl.Cue(tracks[:2])
+	a.pl.SetLyrics(nil)
+	return a
+}
+
+// BenchmarkNowPlayingTransition measures rebuilding a warm, partially open
+// playback view over a playlist; it does not measure GPU or display cadence.
+func BenchmarkNowPlayingTransition(b *testing.B) {
+	a := transitionPlaylist()
+	tt := ui.NewTester(a.view, 1200, 800)
+	tt.Frame()
+	tt.Advance(time.Second)
+	a.nowPlaying = true
+	tt.Frame()
+	tt.Advance(120 * time.Millisecond)
+	tt.Frame()
+	if a.npK < npTextStart || a.npK >= 1 {
+		b.Fatalf("expected a transition with invisible page text, got %v", a.npK)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		tt.Frame()
+	}
+}
+
+// Closing or reversing Now Playing must restore the scrolled playlist so
+// that clicking its first visible song still plays that song.
+func TestNowPlayingRestoresHiddenPlaylist(t *testing.T) {
+	a := transitionPlaylist()
+	tt := ui.NewTester(a.view, 1200, 800)
+	tt.Frame()
+	tt.Advance(time.Second)
+	a.trackList.ScrollTo(25, ui.Start)
+	tt.Frame()
+	first, _ := a.trackList.Visible()
+	if first <= 0 {
+		t.Fatal("playlist did not scroll")
+	}
+	for _, wait := range []time.Duration{120 * time.Millisecond, time.Second} {
+		a.nowPlaying = true
+		tt.Frame()
+		tt.Advance(wait)
+		tt.Frame()
+		a.nowPlaying = false
+		tt.Frame()
+		tt.Advance(time.Second)
+		tt.Frame()
+		if got, _ := a.trackList.Visible(); got != first {
+			t.Fatalf("playlist first visible row changed from %v to %v", first, got)
+		}
+	}
+	// Reverse a closing animation while the playlist is still invisible.
+	a.nowPlaying = true
+	tt.Frame()
+	tt.Advance(time.Second)
+	a.nowPlaying = false
+	tt.Frame()
+	tt.Advance(80 * time.Millisecond)
+	a.nowPlaying = true
+	tt.Frame()
+	tt.Advance(time.Second)
+	// A different track and zoom rebuild the playback layout while covered.
+	a.pl.Next()
+	tt.SetZoom(1.1)
+	tt.Frame()
+	tt.Key(0, ui.KeyEscape)
+	tt.Advance(time.Second)
+	tt.SetZoom(1)
+	tt.Frame()
+	if a.nowPlaying {
+		t.Fatal("Escape did not close the reversed playback view")
+	}
+	if got, _ := a.trackList.Visible(); got != first {
+		t.Fatalf("reversal or zoom lost scroll: first=%d, now=%d", first, got)
+	}
+	for i := 20; i < 40; i++ {
+		name := fmt.Sprintf("Track %03d", i)
+		if r, ok := tt.Find(name); ok && r.Y > 180 && r.Y+r.H < 650 {
+			if err := tt.Click(name); err != nil {
+				t.Fatal(err)
+			}
+			tt.Frame()
+			if a.pl.Current().Name != name {
+				t.Fatalf("clicked %s, playing %s", name, a.pl.Current().Name)
+			}
+			return
+		}
+	}
+	t.Fatal("no visible playlist song after closing")
+}
 
 // playingApp is an app playing a track with lyrics, at a position the test
 // sets with pl.Seek, and the number of times its view was built.
