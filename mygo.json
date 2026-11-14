@@ -2,7 +2,7 @@
   "name": "Cloudy",
   "identifier": "io.github.nya-owo.cloud-nya",
   "slug": "cloudy",
-  "version": "1.2.12",
+  "version": "1.2.13",
   "out": "build",
   "fileAssociations": [
     { "ext": ["mp3"], "name": "MP3 音频", "mimeType": "audio/mpeg", "role": "Viewer" },
