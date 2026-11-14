@@ -71,6 +71,12 @@ func (a *app) redCountAnswered(id int64, s *redCountState, value netease.RedCoun
 }
 
 func (a *app) likeCountButton(c *ui.Context, tr *netease.Track, size float32, color ui.Color) ui.Element {
+	return a.countedHeart(c, tr, size, color, true)
+}
+
+// countedHeart can put the count in its tooltip only, without reserving
+// empty space for it in a narrow player bar.
+func (a *app) countedHeart(c *ui.Context, tr *netease.Track, size float32, color ui.Color, showCount bool) ui.Element {
 	if tr.LocalPath != "" || tr.ProgramID != 0 {
 		return a.likeButton(c, tr, size, color)
 	}
@@ -83,12 +89,19 @@ func (a *app) likeCountButton(c *ui.Context, tr *netease.Track, size float32, co
 	if a.isLiked(tr) {
 		shade = red
 	}
-	wrap := ui.Box(c).Width(size + max(44, size*1.3)).Height(size + 16).AlignItems(ui.Start)
+	width := size + 16
+	if showCount {
+		width = size + max(44, size*1.3)
+	}
+	wrap := ui.Box(c).Width(width).Height(size + 16).AlignItems(ui.Start)
 	wrap.Children(func() {
 		// The whole heart, round, the count beside its upper right as a
 		// superscript, rather than in a corner cut from it.
-		a.heartButton(c.Key("heart"), tr, size, color, red, iconHeart, iconHeartFill)
+		heart := a.heartButton(c.Key("heart"), tr, size, color, red, iconHeart, iconHeartFill)
 		if s.known {
+			heart.Tooltip(fmt.Sprintf("%d 人喜欢", s.value.Count))
+		}
+		if s.known && showCount {
 			label := s.value.Description
 			if label == "" {
 				label = count(s.value.Count)

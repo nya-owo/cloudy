@@ -513,7 +513,8 @@ func (a *app) stageBar(c *ui.Context, tr *netease.Track, art *artwork, accent ui
 		ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
 			ui.Row(c).Grow(1).Basis(0).MinWidth(0).Gap(12).AlignItems(ui.Center).Children(func() {
 				if bmp := bitmap(art); bmp != nil {
-					cov := ui.Box(c.Key(tr.ID)).Size(44, 44)
+					cov := ui.Box(c.Key(tr.ID)).Size(44, 44).Label("律动封面")
+					a.coverContext(cov, tr)
 					in := artIn(cov, bmp)
 					cov.Children(func() { artImage(c, bmp, 8, in) })
 				}
