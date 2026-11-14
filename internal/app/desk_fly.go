@@ -85,6 +85,7 @@ func (a *app) startDeskFly(opening bool, desk mygo.Rectangle) bool {
 // they arrive, or taking over from it as they leave.
 func (a *app) deskFlyView(c *ui.Context) {
 	a.floatTheme(c)
+	a.lyricFace(c.Root())
 	f := &a.deskFly
 	if f.win == nil {
 		return

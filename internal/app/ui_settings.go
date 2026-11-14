@@ -831,41 +831,7 @@ func (a *app) settingsAppearancePage(k *settingsKit) {
 				a.changed()
 			})
 		})
-		k.row("字体", "界面、歌词与评论使用的字体", func() {
-			fonts := a.fontChoices()
-			a.loadFontFiles()
-			// The font chosen in the picker shows among those on offer.
-			if cur := fontOf(s.Font); cur.custom() {
-				fonts = append(fonts[:len(fonts):len(fonts)], cur)
-			}
-			labels := make([]string, 0, len(fonts)+1)
-			chosen := fontOf(s.Font).label
-			for _, f := range fonts {
-				labels = append(labels, f.label)
-			}
-			labels = append(labels, moreFonts)
-			own := func(label string) string {
-				for _, f := range fonts {
-					if f.label == label && f.id != "" {
-						return f.family
-					}
-				}
-				return defaultFontFamily()
-			}
-			if a.paneSelect(c.Key("font"), "字体", &chosen, labels, own) {
-				if chosen == moreFonts {
-					a.openFontPicker()
-					return
-				}
-				for _, f := range fonts {
-					if f.label == chosen {
-						s.Font = f.id
-					}
-				}
-				a.loadFont()
-				a.changed()
-			}
-		})
+		a.fontRows(c, k)
 		k.rowOf(settingRow{label: "侧边栏大小", desc: "歌单、专辑的封面和文字大小",
 			tip: "拖动侧边栏右边缘可以调整宽度，双击边缘恢复"}, func() {
 			labels := make([]string, len(sidebarSizes))

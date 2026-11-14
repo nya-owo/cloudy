@@ -100,3 +100,20 @@ func TestIsCredit(t *testing.T) {
 		}
 	}
 }
+
+func TestFromText(t *testing.T) {
+	timed := FromText("[00:01.00]一\r\n[00:02.00]二")
+	if len(timed) != 2 || IsPlain(timed) || timed[1].Text != "二" {
+		t.Fatalf("timed: %+v", timed)
+	}
+	plain := FromText("一\n\n\n二\n")
+	if !IsPlain(plain) || len(plain) != 3 || plain[1].Text != "" || plain[2].Text != "二" {
+		t.Fatalf("plain: %+v", plain)
+	}
+	if Index(plain, 3*time.Minute) != -1 {
+		t.Error("a plain line is lit")
+	}
+	if Quiets(plain, 3*time.Minute, time.Second) != nil {
+		t.Error("plain lyrics have quiets")
+	}
+}

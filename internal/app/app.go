@@ -150,6 +150,7 @@ type app struct {
 	lyricTrack   int64
 	queueList    ui.ListState
 	queueAt      int             // the row of the queue pane last scrolled to, -1 while it is hidden
+	more         moreState       // what 1.2.13's additions keep (more_state.go)
 	loginKnown   *bool           // whether the app starts at login, once asked
 	sideDragging bool            // the sidebar's edge is being dragged
 	shownTracks  []netease.Track // the songs the page lists now, for choosing among them

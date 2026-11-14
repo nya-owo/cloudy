@@ -20,6 +20,9 @@ type fontPicker struct {
 	box    ui.Handle
 	scroll ui.ScrollState
 	names  []string // the system's families, read as the dialog opens
+	// lyric says the font chosen is the lyrics' (settings.LyricFont),
+	// not the app's.
+	lyric bool
 }
 
 // moreFonts is the last choice of the font select, which opens the picker.
@@ -29,16 +32,21 @@ const moreFonts = "更多字体…"
 // drawn in its own font, which DirectWrite loads the first time.
 const fontPickerLimit = 200
 
-func (a *app) openFontPicker() {
+func (a *app) openFontPicker(lyric bool) {
 	p := &a.settingsView.fontPick
-	p.open, p.query, p.scroll = true, "", ui.ScrollState{}
+	p.open, p.query, p.scroll, p.lyric = true, "", ui.ScrollState{}, lyric
 	p.names = systemFontNames()
 	a.redraw()
 }
 
-// setFont makes id the app's font.
+// setFont makes id the app's font, or the lyrics' when the picker was
+// opened for them.
 func (a *app) setFont(id string) {
-	a.settings.Font = id
+	if a.settingsView.fontPick.lyric {
+		a.settings.LyricFont = id
+	} else {
+		a.settings.Font = id
+	}
 	a.loadFont()
 	a.changed()
 	a.redraw()
@@ -57,7 +65,11 @@ func (a *app) fontPickerDialog(c *ui.Context) {
 		panel.Width(min(560, w-80)).Height(min(640, h-56)).TextColor(ink.text)
 		a.pane(panel, 26, false)
 		panel.Children(func() {
-			dialogHeader(c, ink, "选择字体", "本机已安装的字体；缺少的汉字会用默认字体显示", func() { p.open = false })
+			title := "选择界面字体"
+			if p.lyric {
+				title = "选择歌词字体"
+			}
+			dialogHeader(c, ink, title, "本机已安装的字体；缺少的汉字会用默认字体显示", func() { p.open = false })
 			field := ui.Row(c).Height(34).PaddingX(12).Gap(7).Radius(999).AlignItems(ui.Center).Margin(0, 28, 10, 28)
 			if c.Focused(p.box) {
 				field.Background(a.pal.bg).Shadow(0, 0, 0, 3, a.pal.accent.Alpha(0.25)).Border(1, a.pal.accent.Alpha(0.6))
@@ -86,6 +98,9 @@ func (a *app) fontPickerDialog(c *ui.Context) {
 				shown = append(shown, name)
 			}
 			chosen := a.settings.Font
+			if p.lyric {
+				chosen = a.settings.LyricFont
+			}
 			ui.Scroll(c.Key("font-list")).Grow(1).Shrink(1).TrackScroll(&p.scroll).Padding(0, 20, 4, 20).Children(func() {
 				if len(shown) == 0 {
 					ui.Text(c, "没有找到匹配的字体").FontSize(13).TextColor(ink.faint).Margin(24, 0, 0, 10)

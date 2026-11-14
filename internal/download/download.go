@@ -29,6 +29,10 @@ type Item struct {
 	// Tagged says its file carries its title, cover, lyrics and NetEase ID,
 	// which Cloudy wrote into it.
 	Tagged bool `json:"tagged,omitempty"`
+	// Numbered says the file's track and disc numbers were read into
+	// Track (No, Cd), which indexes before 1.2.13 lack: such a file is
+	// read once more.
+	Numbered bool `json:"numbered,omitempty"`
 }
 
 // Store is where the index of the saved songs is kept.

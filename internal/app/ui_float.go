@@ -191,6 +191,7 @@ func (a *app) deskLookOf(id string) deskLook {
 // Over the pointer it shows it can be moved, and its tools.
 func (a *app) deskView(c *ui.Context) {
 	a.floatTheme(c)
+	a.lyricFace(c.Root())
 	a.followCover()
 	s, pl := &a.settings, a.pl
 	lines, _ := a.shownLyrics()

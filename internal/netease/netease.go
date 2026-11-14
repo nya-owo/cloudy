@@ -45,7 +45,11 @@ type Track struct {
 	Album    Album    `json:"al"`
 	Duration int64    `json:"dt"` // milliseconds
 	Fee      int      `json:"fee"`
-	Alias    []string `json:"alia"`
+	// No and Cd are where the track sits in its album: its number, and
+	// the disc's; 0 where unknown.
+	No    Num      `json:"no,omitempty"`
+	Cd    Num      `json:"cd,omitempty"`
+	Alias []string `json:"alia"`
 	// Reason says why a daily recommendation was picked.
 	Reason string `json:"reason"`
 	// Privilege is what the listener may do with the track, if known.

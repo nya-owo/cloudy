@@ -70,13 +70,6 @@ func (a *app) redCountAnswered(id int64, s *redCountState, value netease.RedCoun
 	}
 }
 
-// The open upper-right corner is part of the vector, so a count fits into
-// it on glass and cover backgrounds without an opaque masking patch.
-var (
-	iconCountHeart     = strokeIcon(`<path d="M14.5 4.3C13.7 4.6 12.9 5.2 12 6.1 10.5 4.5 9.2 3.7 7.5 3.7 4.3 3.7 2 6 2 9.1c0 2.3 1.4 4 3.2 5.7L12 21l6.8-6.2c1.7-1.6 3.2-3.4 3.2-5.3"/>`)
-	iconCountHeartFill = fillIcon(`<path d="M15.8 3.5c-1.4.2-2.7 1.2-3.8 2.3-1.5-1.7-2.8-2.6-4.5-2.6A5.6 5.6 0 0 0 2 8.8c0 2.3 1.5 4.1 3.2 5.8L12 21l6.8-6.3c1.2-1.2 2.5-2.8 3-4.7-3.7.8-7-.5-7-3.7 0-1 .4-1.9 1-2.8Z"/>`)
-)
-
 func (a *app) likeCountButton(c *ui.Context, tr *netease.Track, size float32, color ui.Color) ui.Element {
 	if tr.LocalPath != "" || tr.ProgramID != 0 {
 		return a.likeButton(c, tr, size, color)
@@ -92,18 +85,16 @@ func (a *app) likeCountButton(c *ui.Context, tr *netease.Track, size float32, co
 	}
 	wrap := ui.Box(c).Width(size + max(44, size*1.3)).Height(size + 16).AlignItems(ui.Start)
 	wrap.Children(func() {
-		outline, filled := iconHeart, iconHeartFill
-		if s.known {
-			outline, filled = iconCountHeart, iconCountHeartFill
-		}
-		a.heartButton(c.Key("heart"), tr, size, color, red, outline, filled)
+		// The whole heart, round, the count beside its upper right as a
+		// superscript, rather than in a corner cut from it.
+		a.heartButton(c.Key("heart"), tr, size, color, red, iconHeart, iconHeartFill)
 		if s.known {
 			label := s.value.Description
 			if label == "" {
 				label = count(s.value.Count)
 			}
 			ui.Text(c.Key("red-count"), label).FontSize(max(10, size*0.46)).FontWeight(700).FontFeatures("tnum").TextColor(shade).
-				Absolute().Top(-1).Left(8 + size*0.72).SingleLine().Label(fmt.Sprintf("%d 人喜欢", s.value.Count))
+				Absolute().Top(-2).Left(8 + size*0.86).SingleLine().Label(fmt.Sprintf("%d 人喜欢", s.value.Count))
 		}
 	})
 	return wrap

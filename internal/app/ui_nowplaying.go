@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -260,6 +259,7 @@ func (a *app) nowPlayingBody(c *ui.Context, tr *netease.Track, art *artwork, acc
 						a.artistLinks(c, tr, white.Alpha(0.6), white, true).FontSize(15).SingleLine()
 					})
 					a.likeCountButton(c.Key("like"), tr, 22, white.Alpha(0.7))
+					a.commentCountButton(c.Key("comment-count"), tr, 22, white.Alpha(0.7))
 					a.songMenu(c.Key("more"), tr, 22, white.Alpha(0.7)).Margin(0, -8, 0, 0)
 				})
 				scrub := a.scrubber(c.Key("np-scrub"), &a.npScrub, white.Alpha(0.18), white.Alpha(0.9), 16, accent.Mix(white, 0.35))
@@ -289,8 +289,8 @@ func (a *app) nowPlayingBody(c *ui.Context, tr *netease.Track, art *artwork, acc
 					a.playFlies = nil
 					a.npSpot.play = a.playSpot
 				})
-				volume = ui.Row(c.Key("np-volume")).Justify(ui.Center).Children(func() {
-					a.volumeSlider(c, white.Alpha(0.7), white.Alpha(0.18), 180)
+				volume = ui.Row(c.Key("np-volume-row")).Justify(ui.Center).Children(func() {
+					a.npVolume(c, 28, white.Alpha(0.7), white.Alpha(0.18), white.Alpha(0.5))
 				})
 				// How tall what is under the cover came out, for the cover's
 				// size in the next frame.
@@ -522,6 +522,7 @@ func (a *app) stageBar(c *ui.Context, tr *netease.Track, art *artwork, accent ui
 					a.artistLinks(c, tr, white.Alpha(0.55), white).FontSize(12).SingleLine()
 				})
 				a.likeCountButton(c.Key("like"), tr, 17, white.Alpha(0.6))
+				a.commentCountButton(c.Key("comment-count"), tr, 17, white.Alpha(0.6))
 				a.songMenu(c.Key("more"), tr, 17, white.Alpha(0.6)).Margin(0, 0, 0, -10)
 			})
 			a.transport(c, white, white.Alpha(0.45), white, 22)
@@ -582,6 +583,10 @@ func (a *app) lyricsPane(c *ui.Context, tr *netease.Track, h float32) bool {
 		a.quietCard(c, dim, h*0.18)
 		return false
 	}
+	if lyrics.IsPlain(lines) {
+		a.plainLyrics(c, "plain-lyrics", lines, 24*a.lyricScale(), false)
+		return true
+	}
 	shift := a.lyricShift(tr.ID)
 	pos := pl.Position() + shift
 	cur := lyrics.Index(lines, pos)
@@ -597,6 +602,7 @@ func (a *app) lyricsPane(c *ui.Context, tr *netease.Track, h float32) bool {
 	lag := a.lyricGlide.step(c, &a.lyricScroll)
 
 	scroll := ui.Scroll(c.Key("lyrics")).Grow(1).TrackScroll(&a.lyricScroll).Padding(0, 8, h*0.5, 0)
+	a.lyricFace(scroll)
 	if a.settings.LyricPerspective {
 		scroll.Effect(scrollEdgeFade{depth: 72, top: easeRange(a.lyricScroll.Y, 0, 16), bottom: 1})
 	}
@@ -741,7 +747,7 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 	box := scroll.LayoutBounds()
 	focus := lyricFocus{}
 	if st.focusY > 0 {
-		focus = lyricFocus{st.focusY, box.W, box.H, st.size, st.tilt, c.Theme().Font, a.settings.LyricTrans}
+		focus = lyricFocus{st.focusY, box.W, box.H, st.size, st.tilt, a.lyricFamily(), a.settings.LyricTrans}
 	}
 	// Wait for layout to take the new padding or type size before measuring the target.
 	if focus != a.lyricGlide.focus {
@@ -916,72 +922,8 @@ func (g *lyricGlide) step(c *ui.Context, s *ui.ScrollState) float32 {
 // queuePane lists the whole queue in play order, the track playing marked
 // among the others: a click plays one there, and the list stays as it is.
 func (a *app) queuePane(c *ui.Context) {
-	pl := a.pl
-	order, at := pl.PlayOrder()
-	// Opened, it shows the track playing at its top; after, it follows it
-	// as little as keeps it in view.
-	if at >= 0 && at != a.queueAt {
-		if a.queueAt < 0 {
-			a.queueList.ScrollTo(at, ui.Start)
-		} else {
-			a.queueList.ScrollIntoView(at)
-		}
-		a.queueAt = at
-	}
-	queue := pl.Queue()
-	// Keyed by the song: removing one shifts the indices of those after it.
-	a.queueList.Key = func(row int) any { return queue[order[row]].ID }
-	// Dragged, the rows move in the play order; the song playing plays on.
-	a.queueList.Reorder = func(rows []int, to int) { pl.Reorder(rows, to) }
-	if len(order) > 1 {
-		ui.Row(c.Key("queue-head")).Height(36).PaddingX(10).Gap(10).AlignItems(ui.Center).Children(func() {
-			left := len(order) - max(at, 0) - 1
-			ui.Text(c, fmt.Sprintf("共 %d 首 · 接下来 %d 首 · 拖动可调整顺序", len(order), left)).FontSize(12).TextColor(white.Alpha(0.5)).Grow(1).MinWidth(0).SingleLine()
-			if left > 0 && pillButton(c.Key("clear-queue"), iconTrash, "清空待播", white.Alpha(0.1), white).Clicked() {
-				pl.ClearUpcoming()
-				a.toast = "已清空待播清单"
-			}
-		})
-	}
-	ui.List(c.Key("queue"), &a.queueList, len(order), func(r int) {
-		i := order[r]
-		tr := &queue[i]
-		playing := r == at
-		row := ui.ButtonBase(c.Key(tr.ID)).Height(58).PaddingX(10).Gap(14).Radius(14).AlignItems(ui.Center).FocusRing(false).Label(tr.Name)
-		a.contextMenu(row, a.nowPlaying, func() [][]menuAction {
-			acts := a.songActions(tr, 0)
-			if !playing {
-				acts = append([][]menuAction{{{label: "从待播清单移除", icon: iconX, do: func() { pl.RemoveAt(r) }}}}, acts...)
-			}
-			return acts
-		}, a.songHead(tr))
-		switch {
-		case playing:
-			row.Background(white.Alpha(0.12))
-		case row.Hovered():
-			row.Background(white.Alpha(0.08))
-		}
-		if !tr.Playable() {
-			row.Opacity(0.4)
-		}
-		row.Children(func() {
-			a.cover(c, tr.Album.PicURL, 96, 42, 8)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
-				ui.Text(c, tr.Name).FontSize(14).FontWeight(600).SingleLine()
-				a.artistLinks(c, tr, white.Alpha(0.55), white).FontSize(12.5).SingleLine()
-			})
-			ui.Text(c, clock(tr.Length())).FontSize(12).FontFeatures("tnum").TextColor(white.Alpha(0.4))
-			// The song playing stays: there would be nothing in its place.
-			if !playing {
-				reveal(ui.Box(c.Key("remove-reveal")), row.Hovered()).Children(func() {
-					if iconButton(c.Key("remove"), iconX, 12, white.Alpha(0.6), "从待播清单移除").Size(26, 26).Clicked() {
-						pl.RemoveAt(r)
-					}
-				})
-			}
-		})
-		if row.Clicked() && tr.Playable() && !playing {
-			pl.Jump(i)
-		}
-	}).Grow(1).Padding(8, 0, 40, 0).Gap(2)
+	a.queueRows(c, &a.queueList, &a.queueAt, queueLook{
+		text: white, head: white.Alpha(0.5), artist: white.Alpha(0.55), time: white.Alpha(0.4),
+		on: white.Alpha(0.12), hover: white.Alpha(0.08), pill: white.Alpha(0.1), dark: a.nowPlaying,
+	}, 58, 42)
 }

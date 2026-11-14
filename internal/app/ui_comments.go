@@ -173,6 +173,7 @@ type commentKey struct {
 // which load on as they scroll into view.
 func (a *app) commentsPane(c *ui.Context, tr *netease.Track) {
 	cs := a.commentsFor(tr)
+	a.commentComposer(c, tr)
 	if len(cs.hot) == 0 && len(cs.latest) == 0 {
 		if cs.loading || !cs.loaded && cs.err == "" {
 			ui.Column(c).Grow(1).Padding(4, 8, 0, 0).Gap(2).Children(func() {
@@ -251,6 +252,7 @@ func (a *app) commentRow(c *ui.Context, cm *netease.Comment, now time.Time) {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, cm.User.Nickname).FontSize(13).FontWeight(600).TextColor(white.Alpha(0.6)).SingleLine().Shrink(1).MinWidth(0)
 				ui.Spacer(c)
+				a.commentDelete(c, cm)
 				a.commentLike(c.Key("like"), cm)
 			})
 			ui.Text(c, cm.Content).FontSize(15).LineHeight(1.55).TextColor(white.Alpha(0.92))

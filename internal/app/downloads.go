@@ -253,7 +253,7 @@ func scanDownloadFolder(dir string, indexed []download.Item, artDir string, prog
 		}
 		key := downloadPathKey(path)
 		it, ok := byPath[key]
-		if ok && downloadComplete(it.Track) {
+		if ok && downloadComplete(it.Track) && (it.Numbered || it.Tagged) {
 			// The index says all there is: the file need not be read.
 			seen[key] = true
 			it.Path = path
@@ -264,12 +264,13 @@ func scanDownloadFolder(dir string, indexed []download.Item, artDir string, prog
 			}
 			seen[key] = true
 			if !ok {
-				it = download.Item{Track: downloadFileTrack(*s, artDir), Path: path}
+				it = download.Item{Track: downloadFileTrack(*s, artDir), Path: path, Numbered: true}
 				// Downloaded by Cloudy, it says which song it is.
 				it.Tagged = s.NeteaseID > 0
 			} else {
 				it.Path = path
 				it.Track = downloadDetails(it.Track, *s)
+				it.Numbered = true
 			}
 		}
 		if info, err := os.Stat(path); err == nil {
@@ -323,7 +324,19 @@ func downloadDetails(tr netease.Track, s local.Song) netease.Track {
 	if tr.Duration <= 0 {
 		tr.Duration = s.Duration.Milliseconds()
 	}
+	numberTrack(&tr, s)
 	return tr
+}
+
+// numberTrack gives tr the track and disc numbers of its file's tags,
+// where it has none of its own.
+func numberTrack(tr *netease.Track, s local.Song) {
+	if tr.No == 0 {
+		tr.No = netease.Num(s.Track)
+	}
+	if tr.Cd == 0 {
+		tr.Cd = netease.Num(s.Disc)
+	}
 }
 
 // existingDownloads keeps those of items whose file is still there.
@@ -617,6 +630,7 @@ func downloadFileTrack(s local.Song, artDir string) netease.Track {
 	if cover := downloadCover(s, artDir); cover != "" {
 		tr.Album.PicURL = cover
 	}
+	numberTrack(&tr, s)
 	return tr
 }
 

@@ -103,8 +103,8 @@ func albumArtist(t *netease.Track) string {
 }
 
 // byAlbum orders songs so that each album's keep together: by the album's
-// name, then which album of that name it is, and within it by the songs'
-// names. Songs of no album come last.
+// name, then which album of that name it is, and within it as the album
+// numbers them (albumOrder). Songs of no album come last.
 func byAlbum(x, y netease.Track) int {
 	if (x.Album.Name == "") != (y.Album.Name == "") {
 		if x.Album.Name == "" {
@@ -124,7 +124,7 @@ func byAlbum(x, y netease.Track) int {
 	if c := strings.Compare(albumArtist(&x), albumArtist(&y)); c != 0 {
 		return c
 	}
-	return strings.Compare(x.Name, y.Name)
+	return albumOrder(&x, &y)
 }
 
 // albumGroups finds the albums of tracks, sorted by byAlbum.
@@ -192,6 +192,7 @@ func (a *app) listShown(tracks []netease.Track) []netease.Track {
 	case 3:
 		slices.SortStableFunc(out, func(x, y netease.Track) int { return int(y.Length() - x.Length()) })
 	case sortAlbum:
+		a.numberTracks(out)
 		slices.SortStableFunc(out, byAlbum)
 	}
 	v.groups, v.all = nil, nil
@@ -224,10 +225,11 @@ func (a *app) toolRows(c *ui.Context, tracks []netease.Track, covers bool, heade
 	if len(shown) == 0 && len(tracks) > 0 {
 		foot = append(foot, func(c *ui.Context) { a.empty(c, "没有匹配的歌曲") })
 	}
-	a.trackRowsGrouped(c, shown, a.plView.groups, covers, func(c *ui.Context) {
+	withTools := func(c *ui.Context) {
 		header(c)
 		a.listTools(c, tracks, shown)
-	}, foot...)
+	}
+	a.trackRowsGrouped(c, shown, a.plView.groups, covers, withTools, foot...)
 }
 
 // pageArt is the picture a page opens under, if it has one: a cover held from
@@ -438,7 +440,7 @@ func (a *app) listTools(c *ui.Context, tracks, shown []netease.Track) {
 		ui.Text(c, line).FontSize(12.5).TextColor(p.muted).Grow(1).Shrink(1).MinWidth(0).SingleLine()
 		// Back to the song playing, when it is in the list: scrolled far
 		// from it, there was no way back but scrolling.
-		if cur := a.pl.Current(); cur != nil {
+		if cur := a.pl.Current(); cur != nil && !a.albumGridShown() {
 			if i := slices.IndexFunc(shown, func(t netease.Track) bool { return t.ID == cur.ID }); i >= 0 {
 				if iconButton(c.Key("locate"), iconLocate, 15, p.muted, "定位到正在播放").Size(32, 32).Clicked() {
 					a.trackList.ScrollTo(a.rowOfTrack(i), ui.Center)
@@ -475,6 +477,9 @@ func (a *app) listTools(c *ui.Context, tracks, shown []netease.Track) {
 		})
 		if len(v.all) > 1 {
 			a.albumIndexButton(c, v)
+			if v.sort == sortAlbum && a.albumGridPage() {
+				a.albumViewSwitch(c)
+			}
 		}
 		if sort.Clicked() {
 			acts := make([]menuAction, len(plSorts))

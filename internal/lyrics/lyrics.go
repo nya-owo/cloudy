@@ -209,6 +209,40 @@ func isCJK(r rune) bool {
 	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
 }
 
+// Untimed is when the lines of plain lyrics, without times, are sung:
+// never, as far as Index sees, so none is ever lit.
+const Untimed = 1000 * time.Hour
+
+// IsPlain reports whether lines are plain lyrics, without times, to show
+// as they are rather than follow the song.
+func IsPlain(lines []Line) bool {
+	return len(lines) > 0 && lines[0].At >= Untimed
+}
+
+// FromText makes the lines of lyrics a file carries: LRC, timed, when they
+// have its times, else plain lines, one for each line of text.
+func FromText(text string) []Line {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
+	if text == "" {
+		return nil
+	}
+	if lrcTime.MatchString(text) {
+		return Build(text, "", "")
+	}
+	var lines []Line
+	for _, raw := range strings.Split(strings.ReplaceAll(text, "\r", "\n"), "\n") {
+		t := strings.TrimSpace(raw)
+		if t == "" && (len(lines) == 0 || lines[len(lines)-1].Text == "") {
+			continue
+		}
+		lines = append(lines, Line{At: Untimed, End: Untimed, Text: t})
+	}
+	for len(lines) > 0 && lines[len(lines)-1].Text == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
 // Index returns the line sung at pos, or -1 before the first.
 func Index(lines []Line, pos time.Duration) int {
 	i := sort.Search(len(lines), func(i int) bool { return lines[i].At > pos })
@@ -224,6 +258,9 @@ type Quiet struct {
 // Quiets returns the stretches of a song length long, of at least least,
 // in which none of lines is sung. Credits, as 作词 and 作曲, are not sung.
 func Quiets(lines []Line, length, least time.Duration) []Quiet {
+	if IsPlain(lines) {
+		return nil
+	}
 	var out []Quiet
 	add := func(from, to time.Duration) {
 		if to-from >= least {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/egoist/mygo/audio"
 
+	"netease-music-mygo/internal/local"
 	"netease-music-mygo/internal/lyrics"
 	"netease-music-mygo/internal/netease"
 )
@@ -121,7 +122,11 @@ func fetchLyrics(t netease.Track) []lyrics.Line {
 	}
 	if err != nil && t.LocalPath != "" {
 		if b, e := os.ReadFile(strings.TrimSuffix(t.LocalPath, filepath.Ext(t.LocalPath)) + ".lrc"); e == nil {
-			lines = lyrics.Build(string(b), "", "")
+			lines = lyrics.FromText(string(b))
+		}
+		if len(lines) == 0 {
+			// Lyrics a tagging app wrote into the file itself.
+			lines = lyrics.FromText(local.LyricsOf(t.LocalPath))
 		}
 	}
 	return lines

@@ -30,8 +30,33 @@ type Song struct {
 	// NeteaseID is the NetEase song the file was downloaded as, which Cloudy
 	// writes into what it downloads, or 0.
 	NeteaseID int64
+	// Track and Disc are where the song sits in its album, as its tags
+	// number it, or 0.
+	Track, Disc int
+	// Lyrics are the lyrics the tags carry, as LRC when they are timed,
+	// else as plain lines; empty without.
+	Lyrics string
 
 	pictureType byte
+}
+
+// LyricsOf returns the lyrics the tags of the song at path carry, or "".
+func LyricsOf(path string) string {
+	s, err := Read(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(s.Lyrics)
+}
+
+// number reads "3" or "3/12", as tags number a track or a disc.
+func number(v string) int {
+	v, _, _ = strings.Cut(strings.TrimSpace(v), "/")
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 // Scan returns the songs in dir, and those below it, in the order of their
@@ -237,6 +262,23 @@ func readID3v2(b []byte, s *Song) {
 			s.Album = first(s.Album, id3Text(body))
 		case "TPE2", "TP2":
 			s.Artist = first(s.Artist, id3Text(body))
+		case "TRCK", "TRK":
+			if s.Track == 0 {
+				s.Track = number(id3Text(body))
+			}
+		case "TPOS", "TPA":
+			if s.Disc == 0 {
+				s.Disc = number(id3Text(body))
+			}
+		case "USLT", "ULT":
+			if s.Lyrics == "" {
+				s.Lyrics = readUSLT(body)
+			}
+		case "SYLT", "SLT":
+			// Timed lyrics win over plain ones.
+			if l := readSYLT(body); l != "" {
+				s.Lyrics = l
+			}
 		case "TXXX":
 			readTXXX(body, s)
 		case "APIC":
@@ -592,6 +634,19 @@ func readVorbisComment(b []byte, s *Song) {
 			s.Artist = first(s.Artist, value)
 		case "NETEASE_ID":
 			s.NeteaseID, _ = strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		case "TRACKNUMBER":
+			if s.Track == 0 {
+				s.Track = number(value)
+			}
+		case "DISCNUMBER":
+			if s.Disc == 0 {
+				s.Disc = number(value)
+			}
+		case "LYRICS", "UNSYNCEDLYRICS", "UNSYNCED LYRICS", "SYNCEDLYRICS":
+			// Timed lyrics win over plain ones.
+			if s.Lyrics == "" || !timed(s.Lyrics) && timed(value) {
+				s.Lyrics = value
+			}
 		}
 	}
 }

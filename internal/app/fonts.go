@@ -94,8 +94,29 @@ func fontOf(id string) uiFont {
 func (f uiFont) custom() bool { return f.imported != "" || strings.HasPrefix(f.id, systemFontPrefix) }
 
 // fontFamily returns the family list of the font chosen, for the theme.
-func (a *app) fontFamily() string {
-	if f := fontOf(a.settings.Font); f.custom() {
+func (a *app) fontFamily() string { return familyOf(a.settings.Font) }
+
+// lyricFamily returns the family list of the lyrics' font: the app's,
+// unless the listener chose one of their own (settings.LyricFont).
+func (a *app) lyricFamily() string {
+	if a.settings.LyricFont == "" {
+		return a.fontFamily()
+	}
+	return familyOf(a.settings.LyricFont)
+}
+
+// lyricFace gives e, lyrics or what holds them, the lyrics' font, where
+// it is not the app's.
+func (a *app) lyricFace(e ui.Element) ui.Element {
+	if a.settings.LyricFont != "" {
+		e.Font(a.lyricFamily())
+	}
+	return e
+}
+
+// familyOf returns the family list of the font of id.
+func familyOf(id string) string {
+	if f := fontOf(id); f.custom() {
 		if def := defaultFontFamily(); def != "" {
 			return f.family + ", " + def
 		}
@@ -109,8 +130,16 @@ func (a *app) fontFamily() string {
 // loadFont registers the files of the font chosen, the first time it is
 // chosen: their tens of MB stay on disk for those who read another font.
 // A font that won't load leaves its family to the system's fallback.
+// The lyrics' font loads too.
 func (a *app) loadFont() {
-	f := fontOf(a.settings.Font)
+	a.loadFontOf(a.settings.Font)
+	if a.settings.LyricFont != "" {
+		a.loadFontOf(a.settings.LyricFont)
+	}
+}
+
+func (a *app) loadFontOf(id string) {
+	f := fontOf(id)
 	if f.imported != "" && !a.fontsLoaded[f.id] {
 		if err := registerImportedFont(f.imported); err != nil {
 			log.Printf("font %s: %v", f.id, err)

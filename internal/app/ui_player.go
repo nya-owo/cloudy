@@ -489,9 +489,9 @@ func (a *app) playerBar(c *ui.Context, foreground float32) {
 	// open too.
 	ww, _ := c.Size()
 	roomy := ww >= 1100
-	controls := float32(4*32 + 3*4) // translation, adding to a playlist, the speaker and the details
+	controls := float32(5*32 + 4*4) // translation, adding to a playlist, the queue, the speaker and the details
 	if roomy {
-		controls = 6*32 + 5*4 // and the floating windows
+		controls = 7*32 + 6*4 // and the floating windows
 	}
 	bar := ui.Row(c).Absolute().Gap(20).AlignItems(ui.Center)
 	a.barBox = bar.LayoutBounds()
@@ -564,6 +564,7 @@ func (a *app) playerBar(c *ui.Context, foreground float32) {
 				a.nowPlaying = true
 			}
 			a.likeCountButton(c.Key("like"), tr, 16, muted).Margin(0, 0, 0, 4).Shrink(0)
+			a.barCommentButton(c.Key("comment-count"), tr, 16, muted).Margin(0, 0, 0, -6).Shrink(0)
 		})
 
 		// Controls over the progress.
@@ -626,6 +627,7 @@ func (a *app) playerBar(c *ui.Context, foreground float32) {
 					a.addToPlaylistMenu(add, tr)
 				}
 			}
+			a.queueButton(c, muted)
 			a.volumeButton(c, p.text.Alpha(0.75))
 			if tr != nil {
 				a.songMenuLabeled(c.Key("details"), tr, 16, muted, "歌曲详情")

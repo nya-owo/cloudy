@@ -161,7 +161,7 @@ func scanLibrary(dirs []string, indexed []download.Item, artDir string, progress
 		if err != nil {
 			continue
 		}
-		if it, ok := byPath[downloadPathKey(path)]; ok && it.Size == info.Size() && it.At.Equal(info.ModTime()) {
+		if it, ok := byPath[downloadPathKey(path)]; ok && it.Numbered && it.Size == info.Size() && it.At.Equal(info.ModTime()) {
 			it.Path = path
 			out = append(out, it)
 			continue
@@ -170,7 +170,7 @@ func scanLibrary(dirs []string, indexed []download.Item, artDir string, progress
 		if err != nil {
 			continue
 		}
-		out = append(out, download.Item{Track: downloadFileTrack(*s, artDir), Path: path, Size: info.Size(), At: info.ModTime()})
+		out = append(out, download.Item{Track: downloadFileTrack(*s, artDir), Path: path, Size: info.Size(), At: info.ModTime(), Numbered: true})
 	}
 	if progress != nil {
 		progress(len(paths), len(paths))

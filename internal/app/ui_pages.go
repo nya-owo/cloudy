@@ -331,8 +331,10 @@ func (a *app) playlistHeader(c *ui.Context, pl *netease.Playlist) {
 					}
 					// One ⋯, with what the listener can do to the playlist and
 					// what there is to know of it, rather than two side by side.
-					details := a.savable(pl) || pl.SpecialType == 5
+					// The listener's own playlists have them too: they were
+					// left with renaming and deleting alone.
 					mine := a.editable(pl.ID)
+					details := a.savable(pl) || pl.SpecialType == 5 || mine != nil
 					if details || mine != nil {
 						label := "歌单详情"
 						if mine != nil {
@@ -404,9 +406,19 @@ func (a *app) trackRowsGrouped(c *ui.Context, tracks []netease.Track, groups []a
 	a.underTop, a.underBottom = true, true
 	a.listOpened(c)
 	rows := len(items) + 1 + len(footer)
+	// Sorted by album, the albums may show as a grid of covers in place of
+	// the songs, under the same header (ui_album_grid.go).
+	grid := a.albumGridShown() && len(groups) > 1
+	cols, lines := 1, 0
+	if grid {
+		cols = a.columns(c, 156)
+		a.more.gridCols = cols
+		lines = (len(groups) + cols - 1) / cols
+		rows = 1 + lines + len(footer)
+	}
 	// Stable song identities let a row carry its animation to a new slot.
 	// Keep the viewport offset while neighboring rows close a removed gap.
-	moveRows := a.route.page == pagePlaylist && a.isLikedPlaylist(a.route.id)
+	moveRows := !grid && a.route.page == pagePlaylist && a.isLikedPlaylist(a.route.id)
 	var positions []float32
 	if moveRows {
 		positions = a.movingTrackRows(tracks, items, groups, rows)
@@ -415,7 +427,7 @@ func (a *app) trackRowsGrouped(c *ui.Context, tracks []netease.Track, groups []a
 		a.trackList.KeepOffset = false
 		a.trackLayout = trackRowLayout{}
 	}
-	ui.List(c.Key(a.route), &a.trackList, rows, func(i int) {
+	rowAt := func(i int) {
 		if i == 0 {
 			ui.Column(c).Children(func() {
 				a.startMark(c)
@@ -556,8 +568,35 @@ func (a *app) trackRowsGrouped(c *ui.Context, tracks []netease.Track, groups []a
 				a.pl.PlayQueue(tracks, i)
 			}
 		}
+	}
+	// The header stays as the rows under it switch between the songs and
+	// the grid, those coming sliding in from the side of their button.
+	ui.List(c.Key(a.route), &a.trackList, rows, func(i int) {
+		if i == 0 {
+			rowAt(0)
+			return
+		}
+		view := ui.Column(c.Key(listView{grid}))
+		a.slideIn(c, view, grid)
+		view.Children(func() {
+			if !grid {
+				rowAt(i)
+				return
+			}
+			if i == rows-1 {
+				defer a.endMark(c)
+			}
+			if i > lines {
+				footer[i-lines-1](c)
+				return
+			}
+			a.albumGridLine(c, i-1, cols, groups, tracks)
+		})
 	}).Grow(1).Padding(top+pageGap, pagePad-12, listBottom+32, pagePad-12).ScrollbarInsets(top, 0, listBottom, 0)
 }
+
+// listView keys the rows of a list apart as songs or as a grid of albums.
+type listView struct{ grid bool }
 
 // nowPlayingBars dance in the row of the track playing.
 func (a *app) nowPlayingBars(c *ui.Context) {

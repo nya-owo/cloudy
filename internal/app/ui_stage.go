@@ -97,6 +97,15 @@ func (a *app) stage(c *ui.Context, tr *netease.Track, accent ui.Color) {
 	w, h := c.Size()
 	f := min(64, max(36, w*0.045))
 	box := ui.Box(c.Key("stage")).Grow(1)
+	a.lyricFace(box)
+	if lyrics.IsPlain(lines) {
+		box.Children(func() {
+			ui.Column(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).PaddingX(max(24, w*0.12)).Children(func() {
+				a.plainLyrics(c, "plain-stage", lines, min(34, f*0.6), true)
+			})
+		})
+		return
+	}
 	// In a quiet part a hot comment takes the middle, the lyrics nearly
 	// gone under it (ui_quiet.go).
 	dim, quiet := a.quietShown(c, box, tr, lines, loaded)
