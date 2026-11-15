@@ -64,58 +64,58 @@ func (a *app) view(c *ui.Context) {
 	}
 	root.Children(func() {
 		page := ui.Row(c).Fill().AlignItems(ui.Stretch).Opacity(background)
-		page.Children(func() {
-			if npOpen && (npSettled || a.npK == 1) {
-				// Covered by Now Playing: not built, which would cost each
-				// of its frames as much again as the stage itself. Where
-				// it is scrolled is the app's (pageScroll, navScroll,
-				// trackList), so it shows again as it was.
-				return
-			}
-			sideGlass, mainGlass := a.settings.sidebarGlass(), a.settings.mainGlass()
-			sharedGlass := sideGlass && mainGlass
-			if mainGlass || sideGlass {
-				a.glassPageBackdrop(page)
-			}
-			winW, _ := c.Size()
-			side := ui.Column(c).Width(a.sideWidth(winW))
-			switch {
-			case sideGlass:
-				if !sharedGlass {
-					side.Background(p.bg.Alpha(0.16))
+		if npOpen && (npSettled || a.npK == 1) {
+			// Covered by Now Playing: hide the page container completely so
+			// that it neither participates in drawing nor receives pointer hit-testing,
+			// preventing residual hover updates and compositor bleeding.
+			page.Invisible()
+		} else {
+			page.Children(func() {
+				sideGlass, mainGlass := a.settings.sidebarGlass(), a.settings.mainGlass()
+				sharedGlass := sideGlass && mainGlass
+				if mainGlass || sideGlass {
+					a.glassPageBackdrop(page)
 				}
-			case a.settings.PowerSaver || !c.Vibrancy() || mainGlass:
-				a.sideColor = side.AnimateColor("tint", a.sidebarColor(), ui.Animation{Duration: 700 * time.Millisecond})
-				side.Background(a.sideColor)
-			case a.chosenAccent() != "":
-				// The window's material shows through the sidebar, which has
-				// no color of its own: lay the color over it, thin enough
-				// that the material still shows, so the color covers the
-				// sidebar too.
-				a.sideColor = side.AnimateColor("tint", a.sidebarColor(), ui.Animation{Duration: 700 * time.Millisecond})
-				side.Background(a.sideColor.Alpha(0.55))
-			}
-			side.Children(func() {
-				a.sidebar(c, foreground)
-				a.sidebarResizer(c, winW)
+				winW, _ := c.Size()
+				side := ui.Column(c).Width(a.sideWidth(winW))
+				switch {
+				case sideGlass:
+					if !sharedGlass {
+						side.Background(p.bg.Alpha(0.16))
+					}
+				case a.settings.PowerSaver || !c.Vibrancy() || mainGlass:
+					a.sideColor = side.AnimateColor("tint", a.sidebarColor(), ui.Animation{Duration: 700 * time.Millisecond})
+					side.Background(a.sideColor)
+				case a.chosenAccent() != "":
+					// The window's material shows through the sidebar, which has
+					// no color of its own: lay the color over it, thin enough
+					// that the material still shows, so the color covers the
+					// sidebar too.
+					a.sideColor = side.AnimateColor("tint", a.sidebarColor(), ui.Animation{Duration: 700 * time.Millisecond})
+					side.Background(a.sideColor.Alpha(0.55))
+				}
+				side.Children(func() {
+					a.sidebar(c, foreground)
+					a.sidebarResizer(c, winW)
+				})
+				// Keyed, so that a popover of the sidebar opening or closing
+				// keeps what the page and its bars hold, their edges' fades.
+				main := ui.Box(c.Key("main")).Grow(1)
+				if mainGlass && !sharedGlass {
+					main.Background(p.bg.Alpha(0.16))
+				} else if !mainGlass {
+					main.Background(p.bg)
+				}
+				main.Children(func() {
+					a.content(c, foreground)
+					// The bars float over the page, which scrolls under them:
+					// positioned, they paint over it.
+					a.pageTop(c, foreground)
+					a.playerBar(c, foreground)
+					a.batchBar(c, foreground)
+				})
 			})
-			// Keyed, so that a popover of the sidebar opening or closing
-			// keeps what the page and its bars hold, their edges' fades.
-			main := ui.Box(c.Key("main")).Grow(1)
-			if mainGlass && !sharedGlass {
-				main.Background(p.bg.Alpha(0.16))
-			} else if !mainGlass {
-				main.Background(p.bg)
-			}
-			main.Children(func() {
-				a.content(c, foreground)
-				// The bars float over the page, which scrolls under them:
-				// positioned, they paint over it.
-				a.pageTop(c, foreground)
-				a.playerBar(c, foreground)
-				a.batchBar(c, foreground)
-			})
-		})
+		}
 		a.coverFlightView(c)
 		a.nowPlayingLayer(c, npOpen, npSettled)
 		a.splash(c)

@@ -51,3 +51,26 @@ func TestNowPlayingRestoresTransparentSidebar(t *testing.T) {
 		t.Fatal("restored sidebar navigation did not handle the click")
 	}
 }
+
+// Settled Now Playing hides the underlying page completely so sidebar
+// navigation items neither receive hover/clicks nor bleed through.
+func TestNowPlayingHidesUnderlyingPageWhenSettled(t *testing.T) {
+	a := transitionPlaylist()
+	tt := ui.NewTester(a.view, 1200, 800)
+	tt.Frame()
+	tt.Advance(time.Second)
+	if !tt.HasText("最近播放") {
+		t.Fatal("expected sidebar navigation items before opening playback")
+	}
+
+	a.nowPlaying = true
+	tt.Frame()
+	tt.Advance(npSettle + 100*time.Millisecond)
+	tt.Frame()
+
+	// Once Now Playing is open and settled, the underlying page is invisible.
+	// Sidebar items must not be interactable.
+	if err := tt.Click("最近播放"); err == nil {
+		t.Error("clicking sidebar navigation item should fail when playback view is settled")
+	}
+}
