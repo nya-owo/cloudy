@@ -65,6 +65,12 @@ nya 维护的第三方网易云音乐 Windows 客户端（原名 Cloud-nya），
 
 需要 Go 1.27+。
 
+Windows x64 的高清动态文字完整构建（从固定 MyGo 源码生成 DLL、绑定 SHA、打包许可证及安装器）见 [一键构建说明](docs/build-msdf-windows.md)：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-msdf-windows.ps1
+```
+
 ```bash
 go tool mygo dev     # 开发模式运行
 go tool mygo build   # 打包到 build/
