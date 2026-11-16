@@ -142,6 +142,8 @@ type settings struct {
 	// StageStyle is how the stage sets its lyrics (stageStyles): empty for
 	// Folia's classic, or the id of another of its visualizers.
 	StageStyle string `json:"stageStyle,omitempty"`
+	// StageTextRender affects only Stage ink; retired values load as standard.
+	StageTextRender string `json:"stageTextRender,omitempty"`
 	// StageSparks throws sparks off each word on the stage as it is sung,
 	// whatever its style.
 	StageSparks bool `json:"stageSparks,omitempty"`
@@ -353,6 +355,7 @@ func loadSettingsFrom(path string) settings {
 			s.loaded = true
 		}
 	}
+	s.StageTextRender = stageTextRenderMode(s.StageTextRender)
 	s.path = path
 	return s
 }
@@ -360,6 +363,7 @@ func loadSettingsFrom(path string) settings {
 // save keeps the settings where they were loaded from; defaults that were
 // never loaded, as in tests, are not saved.
 func (s settings) save() error {
+	s.StageTextRender = stageTextRenderMode(s.StageTextRender)
 	path := s.path
 	if path == "" {
 		return nil

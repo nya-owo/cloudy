@@ -46,12 +46,15 @@ type route struct {
 type app struct {
 	savingCover bool // a cover fetch or save dialog is already in progress
 
-	win   *mygo.Window
-	notch *notch
-	tray  *mygo.Tray // the icon in the menu bar or notification area, while it shows
-	art   *artCache
-	pl    *player.Player
-	pal   palette
+	win                 *mygo.Window
+	notch               *notch
+	tray                *mygo.Tray // the icon in the menu bar or notification area, while it shows
+	art                 *artCache
+	pl                  *player.Player
+	pal                 palette
+	stageDynamic        *ui.DynamicMSDF
+	stageDynamicLoading bool
+	stageDynamicLoad    *stageMSDFLoad
 
 	trayPopup trayPopupWindow // Windows' independent, short-lived tray menu
 	// trayPopupGlass is whether it is glass, over trayBackdrop, the desktop
@@ -468,6 +471,7 @@ func Run() error {
 	a.followProgress()
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
 		a.quitting = true
+		a.closeDynamicMSDF()
 		a.settings.Volume = a.volume
 		a.settings.save()
 		a.saveSession()

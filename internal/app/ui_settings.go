@@ -688,6 +688,23 @@ func (a *app) settingsLyricsPage(k *settingsKit) {
 				}
 			})
 		})
+		k.row("律动歌词渲染模式", "歌词放大、缩小和旋转时保持文字清晰，仅影响律动歌词", func() {
+			labels := make([]string, len(stageTextRenderModes))
+			chosen := stageTextRenderModes[0].label
+			for i, mode := range stageTextRenderModes {
+				labels[i] = mode.label
+				if mode.id == stageTextRenderMode(s.StageTextRender) {
+					chosen = mode.label
+				}
+			}
+			k.choose("stage-text-render", "选择律动歌词渲染模式", chosen, labels, func(i int) {
+				s.StageTextRender = stageTextRenderModes[i].id
+				if s.StageTextRender != "msdf" && a.stageDynamic != nil {
+					a.stageDynamic.Suspend()
+				}
+				a.changed()
+			})
+		})
 		k.sub("律动效果", "律动歌词的排版与动画", s.LyricsStage, func() {
 			labels := make([]string, len(stageStyles))
 			chosen := stageStyles[0].label

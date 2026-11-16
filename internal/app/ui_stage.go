@@ -99,12 +99,27 @@ func (a *app) stage(c *ui.Context, tr *netease.Track, accent ui.Color) {
 	box := ui.Box(c.Key("stage")).Grow(1)
 	a.lyricFace(box)
 	if lyrics.IsPlain(lines) {
+		if a.stageDynamic != nil {
+			a.stageDynamic.Suspend()
+		}
 		box.Children(func() {
 			ui.Column(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).PaddingX(max(24, w*0.12)).Children(func() {
 				a.plainLyrics(c, "plain-stage", lines, min(34, f*0.6), true)
 			})
 		})
 		return
+	}
+	if a.settings.StageTextRender == "msdf" {
+		a.initDynamicMSDF()
+		if a.stageDynamic != nil {
+			var song int64
+			if tr != nil {
+				song = tr.ID
+			}
+			a.stageDynamic.BeginFrameFor(song, a.stageFontFamily(c)+"|"+a.settings.StageStyle)
+		}
+	} else if a.stageDynamic != nil {
+		a.stageDynamic.Suspend()
 	}
 	// In a quiet part a hot comment takes the middle, the lyrics nearly
 	// gone under it (ui_quiet.go).
@@ -124,6 +139,17 @@ func (a *app) stage(c *ui.Context, tr *netease.Track, accent ui.Color) {
 	}
 	pos := a.lyricPos()
 	cur := lyrics.Index(lines, pos)
+	if a.stageDynamic != nil && a.settings.StageTextRender == "msdf" {
+		fonts := []ui.Font{{Family: a.stageFontFamily(c), Size: f, Weight: 800}}
+		if a.settings.StageStyle == "tilt" {
+			fonts = []ui.Font{{Family: a.stageFontFamily(c), Size: min(w*0.06875, 90), Weight: 400}, {Family: a.stageFontFamily(c), Size: min(w*0.06875, 90), Weight: 300, Italic: true}}
+		}
+		for i := max(0, cur); i < min(len(lines), max(0, cur)+2); i++ {
+			for _, font := range fonts {
+				a.stageDynamic.Preload(ui.ShapeText(lines[i].Text, font, 0))
+			}
+		}
+	}
 	// Under a hot comment there is nothing to move: the quiet asks for
 	// the frame where it ends.
 	if pl.Playing() && !(quiet && dim > 0.98) {
@@ -210,7 +236,7 @@ func (a *app) stageLine(c *ui.Context, l *lyrics.Line, pos time.Duration, f, w, 
 		a.partitaLine(c, l, pos, f, h, fade, accent)
 		return
 	case "tilt":
-		tiltLine(c, l, pos, w, fade, accent, a.settings.StageSparks)
+		a.tiltLine(c, l, pos, w, fade, accent, a.settings.StageSparks)
 		return
 	}
 	seed := float64(l.At / time.Millisecond)
@@ -223,14 +249,14 @@ func (a *app) stageLine(c *ui.Context, l *lyrics.Line, pos time.Duration, f, w, 
 		Wrap().Justify(justify).AlignContent(ui.Center).AlignItems(ui.Center).Translate(0, lift).
 		Opacity(fade).PassThrough().Children(func() {
 		for i, word := range l.Words {
-			a.stageWord(c.Key(i), word, shapes[i], pos, f, accent)
+			a.stageWord(c.Key(i), word, shapes[i], pos, f, 1, accent)
 		}
 	})
 }
 
 // stageWord shows a word as it is at pos: waiting to be sung, being sung,
 // or sung.
-func (a *app) stageWord(c *ui.Context, word lyrics.Word, s wordShape, pos time.Duration, f float32, accent ui.Color) {
+func (a *app) stageWord(c *ui.Context, word lyrics.Word, s wordShape, pos time.Duration, f, parentScale float32, accent ui.Color) {
 	const lookahead = 80 * time.Millisecond
 	start := word.Start - lookahead
 	end := max(word.End, word.Start+150*time.Millisecond)
@@ -267,6 +293,7 @@ func (a *app) stageWord(c *ui.Context, word lyrics.Word, s wordShape, pos time.D
 	box := ui.Box(c).MarginEnd(s.margin).Translate(x, y).Rotate(rotate).Scale(scale, scale).Opacity(opacity)
 	box.Children(func() {
 		text := ui.Text(c.Key("body"), word.Text).FontSize(f).FontWeight(800).NoWrap().TextColor(color)
+		a.stageTextRaster(text, word.Text, ui.Font{Family: a.stageFontFamily(c), Size: f, Weight: 800}, scale*parentScale, color)
 		if blur > 0.3 {
 			text.Blur(blur)
 		}
