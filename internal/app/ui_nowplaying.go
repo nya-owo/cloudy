@@ -59,6 +59,8 @@ func (a *app) npState(c *ui.Context) (open, settled bool) {
 
 // npProgress is shared by the playback view and the page beneath it, so
 // their handover stays in sync even if the animation reverses midway.
+type npMotionKey int
+
 func (a *app) npProgress(root ui.Element, open bool) float32 {
 	to, move := float32(0), npClosing
 	if open {
@@ -67,7 +69,7 @@ func (a *app) npProgress(root ui.Element, open bool) float32 {
 	if a.motion == motionOff || a.pl.Current() == nil {
 		return to
 	}
-	return clamp01(root.AnimateTo("now-playing", to, move))
+	return clamp01(root.AnimateTo(npMotionKey(a.motionGen), to, move))
 }
 
 // nowPlayingLayer holds Now Playing over the whole window, growing out of

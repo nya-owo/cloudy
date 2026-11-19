@@ -27,8 +27,14 @@ const (
 	motionFull
 )
 
+// applyMotionPref tells MyGo whether to ignore the desktop's reduce-motion
+// preference in this window. Cloudy's own "off" setting still turns motion off.
+func (a *app) applyMotionPref(c *ui.Context) {
+	c.SetIgnoreReduceMotion(a.settings.IgnoreSystemMotion && a.settings.Motion != "off")
+}
+
 // motionLevel is how much the app moves: not at all while the system asks
-// for less motion.
+// for less motion (unless IgnoreSystemMotion is on).
 func (a *app) motionLevel(c *ui.Context) int {
 	switch {
 	case c.Preferences().ReduceMotion || a.settings.Motion == "off":
@@ -273,7 +279,7 @@ func (a *app) dialog(c *ui.Context, key string, dim float32, open *bool, fn func
 	stage := ui.Box(c.Key(key+"-stage")).Absolute().Size(0, 0).PassThrough()
 	k := b2f(*open)
 	if a.motion != motionOff {
-		k = clamp01(stage.AnimateTo("in", k, motionPane))
+		k = clamp01(stage.AnimateTo(a.motionGen, k, motionPane))
 	}
 	if k == 0 && !*open {
 		return

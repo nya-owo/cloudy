@@ -510,11 +510,14 @@ func (a *app) settingsAppearancePage(k *settingsKit) {
 				a.changed()
 			}
 		})
+		k.row("无视系统动效设置", "系统关闭动画效果时，仍按应用内设置播放动效", func() {
+			k.toggle("ignore-system-motion", "切换无视系统动效设置", &s.IgnoreSystemMotion, false, nil)
+		})
 		k.row("封面旋转", "播放时播放栏里的封面像黑胶一样转动", func() {
 			k.toggle("bar-spin", "播放栏封面旋转", &s.BarSpin, false, a.leavePowerSaver)
 		})
 	})
-	k.foot("精简时界面动画只保留淡入淡出。封面旋转是播放栏里的封面像黑胶一样转动。")
+	k.foot("精简时界面动画只保留淡入淡出；开启「无视系统动效设置」后，即使系统关闭了动画效果也仍按此处设置播放。封面旋转是播放栏里的封面像黑胶一样转动。")
 	k.group("文字", func() {
 		k.row("界面缩放", "也可以按 Ctrl 加 + 或 - 调整，Ctrl 加 0 恢复", func() {
 			labels, values := scaleChoices(80, 200)

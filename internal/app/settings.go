@@ -66,6 +66,9 @@ type settings struct {
 	GlassPanels bool `json:"glassPanels"`
 	// Motion is how much the app moves: full, lite or off.
 	Motion string `json:"motion,omitempty"`
+	// IgnoreSystemMotion keeps Cloudy's animations running even when the
+	// operating system disables animations (Preferences.ReduceMotion).
+	IgnoreSystemMotion bool `json:"ignoreSystemMotion,omitempty"`
 	// AccentCover takes the accent from the cover playing: else the app's red.
 	AccentCover bool `json:"accentCover"`
 	// Accent is the color the listener gave the app, #RRGGBB, or empty for

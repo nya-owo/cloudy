@@ -153,6 +153,7 @@ func (a *app) toggleDeskLock() {
 
 // floatTheme gives a floating window the app's font, on nothing.
 func (a *app) floatTheme(c *ui.Context) {
+	a.applyMotionPref(c)
 	t := *c.Theme()
 	t.Font = a.fontFamily()
 	c.SetTheme(&t)

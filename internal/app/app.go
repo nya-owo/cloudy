@@ -209,6 +209,7 @@ type app struct {
 	npK                   float32          // how far Now Playing has opened, from 0 to 1
 	npCoverScale          float32          // how its cover stands, which the flight lands at
 	motion                int              // how much the app moves, in this frame
+	motionGen             int              // bumped when motion turns back on, so open panes don't replay from stale channels
 	playFlies             func(ui.Element) // what hides the play button being built as it flies
 	pageDir               int              // the way the page last changed: 1 in, -1 back, 0 across
 	feedback              feedbackState    // the message being written, in the settings

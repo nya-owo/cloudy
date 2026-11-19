@@ -14,6 +14,7 @@ import (
 const sidebarWidth = 232
 
 func (a *app) view(c *ui.Context) {
+	a.applyMotionPref(c)
 	// Poll quietly while the real window is open. Testers do not start
 	// background account requests just by drawing a frame.
 	if a.win != nil && a.profile != nil {
@@ -27,7 +28,11 @@ func (a *app) view(c *ui.Context) {
 		// and the sidebar a breath of it.
 		a.pal = themeAccent(a.pal, accent)
 	}
-	a.motion = a.motionLevel(c)
+	nextMotion := a.motionLevel(c)
+	if a.motion == motionOff && nextMotion != motionOff {
+		a.motionGen++
+	}
+	a.motion = nextMotion
 	a.followCover()
 	if accent, ok := a.coverAccent(); ok && a.settings.AccentCover {
 		a.pal.accent = accent
