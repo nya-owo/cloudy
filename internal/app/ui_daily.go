@@ -507,15 +507,11 @@ func drawRecord(p *ui.Painter, r ui.Rect, bmp *ui.Bitmap, angle float32) {
 		{Color: white.Alpha(0), At: 1},
 	}}, d/2)
 	p.Stroke(r, white.Alpha(0.1), d/2, 1)
-	// The label, turning: clipped still, its cover turning inside.
+	// The label, turning on the GPU without a rounded clip mask.
 	lr := d * 0.18
 	label := ui.Rect{X: cx - lr, Y: cy - lr, W: 2 * lr, H: 2 * lr}
 	p.Fill(label, ui.Hex("#d8262d"), lr)
-	if bmp != nil {
-		p.Clip(label, lr, func() {
-			p.Transform(ui.Rotation(angle), cx, cy, func() { p.Image(bmp, label, ui.Cover) })
-		})
-	}
+	paintDisc(p, label, bmp, angle, 1)
 	p.Stroke(label, ui.RGBA(0, 0, 0, 0.35), lr, 1.5)
 	// The spindle hole.
 	p.Fill(ui.Rect{X: cx - 2.5, Y: cy - 2.5, W: 5, H: 5}, ui.Hex("#0e0e10"), 2.5)

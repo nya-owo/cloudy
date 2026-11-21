@@ -45,6 +45,28 @@ type deskFlight struct {
 	// line again; zero before.
 	landed time.Time
 	ending int // frames since
+
+	// Cached per-flight shaping, GPU sprite strip, and last deskWin opacity so
+	// flying frames don't reshape text or rasterize per-character CPU clip masks.
+	glyphs      []ui.Rect
+	lineH       float32
+	edge        *ui.TextLayout
+	edgeStyle   string
+	strip       deskFlyStrip
+	deskOpacity float64
+}
+
+// deskFlyStrip holds the flying lyric line rendered once into a GPU canvas
+// texture at device-pixel resolution, so each flying character draws as one
+// transformed ImageRegion quad with zero clipped transforms and zero CPU
+// raster.ClipMask work.
+type deskFlyStrip struct {
+	canvas *ui.Canvas
+	scale  float32
+	look   deskLook
+	pos    time.Duration
+	ready  bool
+	src    []ui.Rect
 }
 
 // deskMain is the line the desktop lyrics show large: its text, its words
@@ -123,13 +145,15 @@ func (a *app) startDeskFly(opening bool, desk mygo.Rectangle) bool {
 	btn := ui.Rect{X: float32(cb.X) + a.deskBtn.X, Y: float32(cb.Y) + a.deskBtn.Y, W: a.deskBtn.W, H: a.deskBtn.H}
 	// Where the line lies: as the lyrics' window laid it out last, going
 	// back; coming out, reckoned as it will, until it does.
+	look := a.deskLookOf(a.settings.DeskStyle)
+	baseInk := a.deskShape(main, look, 0, false)
+	w, h := baseInk.Size()
+	glyphs := deskGlyphs(baseInk, main)
 	at := a.deskLineAt
 	if opening || at.W == 0 {
-		ink := a.deskShape(main, a.deskLookOf(a.settings.DeskStyle), 0, false)
-		w, h := ink.Size()
 		w = min(w, deskW-90)
 		pad := float32(0)
-		if a.deskLookOf(a.settings.DeskStyle).pill.A > 0 {
+		if look.pill.A > 0 {
 			pad = 10
 		}
 		at = ui.Rect{X: (deskW - w) / 2, Y: deskToolsRoom + pad, W: w, H: h}
@@ -143,8 +167,14 @@ func (a *app) startDeskFly(opening bool, desk mygo.Rectangle) bool {
 	bottom := int(max(btn.Y+btn.H, line.Y+line.H) + room)
 	f := &a.deskFly
 	*f = deskFlight{opening: opening, line: main, at: at,
-		from: ui.Rect{X: btn.X - float32(left), Y: btn.Y - float32(top), W: btn.W, H: btn.H},
-		desk: ui.Point{X: float32(desk.X - left), Y: float32(desk.Y - top)}}
+		from:        ui.Rect{X: btn.X - float32(left), Y: btn.Y - float32(top), W: btn.W, H: btn.H},
+		desk:        ui.Point{X: float32(desk.X - left), Y: float32(desk.Y - top)},
+		glyphs:      glyphs,
+		lineH:       h,
+		deskOpacity: -1}
+	if look.edge.A > 0 {
+		f.edge, f.edgeStyle = baseInk, a.settings.DeskStyle
+	}
 	f.win = mygo.NewFlyout(mygo.FlyoutOptions{Tray: a.tray, Hidden: true, Width: right - left, Height: bottom - top, Content: ui.View(a.deskFlyView)})
 	showAtOnce(f.win.NativeHandle())
 	f.win.SetPosition(left, top)
@@ -176,16 +206,26 @@ func (a *app) deskFlyView(c *ui.Context) {
 		// The flight shows the line now: its window can leave it to it.
 		a.deskWin.Invalidate()
 	}
-	n := len(deskGlyphs(a.deskShape(f.line, a.deskLookOf(a.settings.DeskStyle), 0, false), f.line))
-	_, total := deskFlyLags(n)
+	if f.glyphs == nil {
+		ink := a.deskShape(f.line, a.deskLookOf(a.settings.DeskStyle), 0, false)
+		_, f.lineH = ink.Size()
+		f.glyphs = deskGlyphs(ink, f.line)
+	}
+	_, total := deskFlyLags(len(f.glyphs))
 	k := float32(f.gone) / float32(total)
 	// The lyrics' window, its capsule if it has one, comes in as the
-	// characters near it, or goes as they leave.
+	// characters near it, or goes as they leave. Skip redundant OS opacity
+	// syscalls while the value hasn't changed.
 	if a.deskWin != nil {
+		op := f.deskOpacity
 		if f.opening {
-			a.deskWin.SetOpacity(float64(easeRange(k, 0.5, 0.92)))
+			op = float64(easeRange(k, 0.5, 0.92))
 		} else if !a.settings.DeskLyrics {
-			a.deskWin.SetOpacity(float64(1 - easeRange(k, 0.05, 0.4)))
+			op = float64(1 - easeRange(k, 0.05, 0.4))
+		}
+		if op >= 0 && math.Abs(op-f.deskOpacity) > 1e-4 {
+			f.deskOpacity = op
+			a.deskWin.SetOpacity(op)
 		}
 	}
 	gone := f.gone
@@ -231,12 +271,16 @@ func (a *app) deskFlyView(c *ui.Context) {
 func (a *app) paintDeskFly(p *ui.Painter, f *deskFlight, gone time.Duration) {
 	look := a.deskLookOf(a.settings.DeskStyle)
 	pos := a.lyricPos()
-	ink := a.deskShape(f.line, look, pos, true)
-	glyphs := deskGlyphs(ink, f.line)
+	if f.glyphs == nil {
+		ink := a.deskShape(f.line, look, pos, false)
+		_, f.lineH = ink.Size()
+		f.glyphs = deskGlyphs(ink, f.line)
+	}
+	glyphs := f.glyphs
 	lag, total := deskFlyLags(len(glyphs))
 	ox, oy := f.desk.X+f.at.X, f.desk.Y+f.at.Y
 	bx, by := f.from.X+f.from.W/2, f.from.Y+f.from.H/2
-	a.paintDeskGlyphs(p, f.line, look, pos, ox, oy, func(i int, g ui.Rect) (k float32, turn float32) {
+	a.paintDeskGlyphsCached(p, f.line, look, pos, ox, oy, func(i int, g ui.Rect) (k float32, turn float32) {
 		// Back, the way out run backwards: the last one out goes first,
 		// from the end of the line, none crossing those still in it.
 		order := i
@@ -253,7 +297,7 @@ func (a *app) paintDeskFly(p *ui.Painter, f *deskFlight, gone time.Duration) {
 			turn = -turn
 		}
 		return u, turn
-	}, bx, by)
+	}, bx, by, f)
 	// The button, lit, swelling as they leave it, and gone after the last
 	// one; or lit as they come back into it.
 	accent := a.pal.accent
@@ -311,8 +355,12 @@ func (a *app) deskInk(look deskLook, wd *lyrics.Word, pos time.Duration) ui.Colo
 // for the edge. Spaces go with the character before them, and what the
 // lyrics' window cuts off is left out.
 func deskGlyphs(ink *ui.TextLayout, m deskMain) []ui.Rect {
+	return deskGlyphsLimit(ink, m, deskW-90)
+}
+
+func deskGlyphsLimit(ink *ui.TextLayout, m deskMain, maxW float32) []ui.Rect {
 	w, h := ink.Size()
-	limit := min(w, deskW-90)
+	limit := min(w, maxW)
 	units := utf16.Encode([]rune(m.shaped()))
 	var out []ui.Rect
 	for at := 0; at < len(units); {
@@ -350,56 +398,212 @@ func (m deskMain) shaped() string {
 	return b.String()
 }
 
+// deskGlyphClip returns the rectangle of character i in window DIPs, with
+// overhang padding on the first and last characters for outline strokes.
+func deskGlyphClip(glyphs []ui.Rect, i int, ox, oy, size float32) ui.Rect {
+	g := glyphs[i]
+	clip := ui.Rect{X: ox + g.X, Y: oy + g.Y, W: g.W, H: g.H}
+	if i == 0 {
+		clip.X -= size * 0.4
+		clip.W += size * 0.4
+	}
+	if i == len(glyphs)-1 {
+		clip.W += size * 0.4
+	}
+	return clip
+}
+
+// prepare renders the lyric line once into a GPU canvas at device-pixel
+// resolution and records each character's source slice in canvas pixels.
+func (s *deskFlyStrip) prepare(a *app, p *ui.Painter, m deskMain, look deskLook, pos time.Duration, glyphs []ui.Rect, lineH float32) {
+	if len(glyphs) == 0 {
+		return
+	}
+	scale := p.Scale()
+	if scale <= 0 {
+		scale = 1
+	}
+	wordTimed := len(m.words) > 0 && a.settings.DeskWords
+	if s.ready && s.canvas != nil && s.scale == scale && s.look == look && len(s.src) == len(glyphs) && (!wordTimed || s.pos == pos) {
+		return
+	}
+	mHi := m
+	mHi.size = m.size * scale
+	inkHi := a.deskShape(mHi, look, pos, true)
+	var edgeHi *ui.TextLayout
+	if look.edge.A > 0 {
+		edgeHi = a.deskShape(mHi, look, pos, false)
+	}
+	_, hHi := inkHi.Size()
+	gHi := deskGlyphsLimit(inkHi, mHi, (deskW-90)*scale)
+	useHi := len(gHi) == len(glyphs)
+
+	var minX, maxX, minY, maxY float32
+	if useHi {
+		first := deskGlyphClip(gHi, 0, 0, 0, mHi.size)
+		last := deskGlyphClip(gHi, len(gHi)-1, 0, 0, mHi.size)
+		minX, maxX = float32(math.Floor(float64(first.X))), float32(math.Ceil(float64(last.X+last.W)))
+		minY, maxY = float32(math.Floor(float64(-hHi*0.6))), float32(math.Ceil(float64(hHi*1.6)))
+	} else {
+		first := deskGlyphClip(glyphs, 0, 0, 0, m.size)
+		last := deskGlyphClip(glyphs, len(glyphs)-1, 0, 0, m.size)
+		minX, maxX = float32(math.Floor(float64(first.X*scale))), float32(math.Ceil(float64((last.X+last.W)*scale)))
+		minY, maxY = float32(math.Floor(float64(-lineH*0.6*scale))), float32(math.Ceil(float64(lineH*1.6*scale)))
+	}
+	cw, ch := max(1, int(maxX-minX)), max(1, int(maxY-minY))
+	if s.canvas == nil {
+		s.canvas = ui.NewCanvas(cw, ch)
+	} else if w, h := s.canvas.Size(); w != cw || h != ch {
+		s.canvas = ui.NewCanvas(cw, ch)
+	}
+	widthHi := max(1.1, m.size*0.055) * scale
+	color := a.deskInk(look, nil, pos)
+	dx, dy := -minX, -minY
+	s.canvas.Draw(p, func(cp *ui.Painter) {
+		if edgeHi != nil {
+			for i := range 8 {
+				turn := float64(i) * math.Pi / 4
+				cp.TextLayout(edgeHi, dx+widthHi*float32(math.Cos(turn)), dy+widthHi*float32(math.Sin(turn)), look.edge)
+			}
+		}
+		cp.TextLayout(inkHi, dx, dy, color)
+	})
+	s.src = s.src[:0]
+	for i := range glyphs {
+		var r ui.Rect
+		if useHi {
+			r = deskGlyphClip(gHi, i, dx, dy, mHi.size)
+		} else {
+			r = deskGlyphClip(glyphs, i, 0, 0, m.size)
+			r = ui.Rect{X: r.X*scale + dx, Y: r.Y*scale + dy, W: r.W * scale, H: r.H * scale}
+		}
+		x0, y0 := max(float32(0), r.X), max(float32(0), r.Y)
+		x1, y1 := min(float32(cw), r.X+r.W), min(float32(ch), r.Y+r.H)
+		s.src = append(s.src, ui.Rect{X: x0, Y: y0, W: max(0, x1-x0), H: max(0, y1-y0)})
+	}
+	s.scale, s.look, s.pos, s.ready = scale, look, pos, true
+}
+
 // paintDeskGlyphs paints the line, its edge first if it has one, as the
 // lyrics' window does, at (ox, oy), each character where way says it is:
 // k of the way from the button at (bx, by), where it is a third of its size,
 // to its place, turned by turn degrees out of the way. All at their place,
 // it is the line as the lyrics' window shows it.
 func (a *app) paintDeskGlyphs(p *ui.Painter, m deskMain, look deskLook, pos time.Duration, ox, oy float32, way func(i int, g ui.Rect) (k, turn float32), bx, by float32) {
-	ink := a.deskShape(m, look, pos, true)
-	var edge *ui.TextLayout
-	if look.edge.A > 0 {
-		edge = a.deskShape(m, look, pos, false)
+	a.paintDeskGlyphsCached(p, m, look, pos, ox, oy, way, bx, by, nil)
+}
+
+func (a *app) paintDeskGlyphsCached(p *ui.Painter, m deskMain, look deskLook, pos time.Duration, ox, oy float32, way func(i int, g ui.Rect) (k, turn float32), bx, by float32, f *deskFlight) {
+	var glyphs []ui.Rect
+	var h float32
+	var ink, edge *ui.TextLayout
+	if f != nil && f.glyphs != nil {
+		glyphs, h = f.glyphs, f.lineH
+	} else {
+		ink = a.deskShape(m, look, pos, true)
+		_, h = ink.Size()
+		glyphs = deskGlyphs(ink, m)
 	}
-	width := max(1.1, m.size*0.055)
-	color := a.deskInk(look, nil, pos)
-	paint := func() {
-		if edge != nil {
-			for i := range 8 {
-				turn := float64(i) * math.Pi / 4
-				p.TextLayout(edge, ox+width*float32(math.Cos(turn)), oy+width*float32(math.Sin(turn)), look.edge)
-			}
-		}
-		p.TextLayout(ink, ox, oy, color)
+	if len(glyphs) == 0 {
+		return
 	}
-	glyphs := deskGlyphs(ink, m)
-	_, h := ink.Size()
+	type step struct {
+		k, turn float32
+	}
+	steps := make([]step, len(glyphs))
+	anyLanded, anyFlying := false, false
 	for i, g := range glyphs {
 		k, turn := way(i, g)
-		cx, cy := ox+g.X+g.W/2, oy+h/2
-		// The first and the last reach a little past the line, for ink
-		// over its ends.
-		clip := ui.Rect{X: ox + g.X, Y: oy + g.Y, W: g.W, H: g.H}
-		if i == 0 {
-			clip.X -= m.size * 0.4
-			clip.W += m.size * 0.4
-		}
-		if i == len(glyphs)-1 {
-			clip.W += m.size * 0.4
-		}
+		steps[i] = step{k, turn}
 		if k >= 1 {
-			p.Clip(clip, 0, paint)
+			anyLanded = true
+		} else {
+			anyFlying = true
+		}
+	}
+
+	// Landed characters draw directly under axis-aligned GPU scissor clips
+	// (merged across contiguous runs) so the handover to deskWin is pixel-exact.
+	if anyLanded {
+		if ink == nil {
+			ink = a.deskShape(m, look, pos, true)
+		}
+		if look.edge.A > 0 {
+			if f != nil && f.edge != nil && f.edgeStyle == a.settings.DeskStyle {
+				edge = f.edge
+			} else {
+				edge = a.deskShape(m, look, pos, false)
+				if f != nil {
+					f.edge, f.edgeStyle = edge, a.settings.DeskStyle
+				}
+			}
+		}
+		width := max(1.1, m.size*0.055)
+		color := a.deskInk(look, nil, pos)
+		paint := func() {
+			if edge != nil {
+				for i := range 8 {
+					turn := float64(i) * math.Pi / 4
+					p.TextLayout(edge, ox+width*float32(math.Cos(turn)), oy+width*float32(math.Sin(turn)), look.edge)
+				}
+			}
+			p.TextLayout(ink, ox, oy, color)
+		}
+		for i := 0; i < len(glyphs); {
+			if steps[i].k < 1 {
+				i++
+				continue
+			}
+			span := deskGlyphClip(glyphs, i, ox, oy, m.size)
+			j := i + 1
+			for j < len(glyphs) && steps[j].k >= 1 {
+				next := deskGlyphClip(glyphs, j, ox, oy, m.size)
+				x0 := min(span.X, next.X)
+				x1 := max(span.X+span.W, next.X+next.W)
+				span.X, span.W = x0, x1-x0
+				j++
+			}
+			p.Clip(span, 0, paint)
+			i = j
+		}
+	}
+
+	if !anyFlying {
+		return
+	}
+
+	// Flying characters sample from a single GPU canvas strip via ImageRegion
+	// without p.Clip inside p.Transform, avoiding per-character CPU ClipMask
+	// rasterization and batching all glyphs into one GPU draw call.
+	var local deskFlyStrip
+	strip := &local
+	if f != nil {
+		strip = &f.strip
+	}
+	strip.prepare(a, p, m, look, pos, glyphs, h)
+	if strip.canvas == nil {
+		return
+	}
+	bmp := strip.canvas.Bitmap()
+	for i, g := range glyphs {
+		st := steps[i]
+		if st.k >= 1 {
 			continue
 		}
+		cx, cy := ox+g.X+g.W/2, oy+h/2
+		clip := deskGlyphClip(glyphs, i, ox, oy, m.size)
 		// Its center where it lands, and where it is now: on the way out of
 		// the button it rises sooner than it crosses, and comes down last.
-		travel := easeRange(k, 0, 1)
+		travel := easeRange(st.k, 0, 1)
 		nx, ny := lerp(bx, cx, travel), lerp(by, cy, 1-(1-travel)*(1-travel))
 		// A third of its size out of the button, growing on its way, a
 		// little more just before it lands, then itself.
-		s := lerp(0.32, 1, easeRange(k, 0, 0.78)) + 0.08*float32(math.Sin(math.Pi*float64(clamp01((k-0.78)/0.22))))
-		r := turn * (1 - easeRange(k, 0.3, 1))
+		s := lerp(0.32, 1, easeRange(st.k, 0, 0.78)) + 0.08*float32(math.Sin(math.Pi*float64(clamp01((st.k-0.78)/0.22))))
+		r := st.turn * (1 - easeRange(st.k, 0.3, 1))
 		t := ui.Scaling(s, s).Then(ui.Rotation(r)).Then(ui.Translation(nx-cx, ny-cy))
-		p.Transform(t, cx, cy, func() { p.Clip(clip, 0, paint) })
+		src := strip.src[i]
+		p.Transform(t, cx, cy, func() {
+			p.ImageRegion(bmp, src, clip, ui.ImageOptions{})
+		})
 	}
 }

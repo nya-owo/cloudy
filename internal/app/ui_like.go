@@ -219,11 +219,13 @@ func drawBurst(p *ui.Painter, r ui.Rect, size float32, elapsed time.Duration, ac
 	out := func(x float32) float32 { return 1 - (1-x)*(1-x)*(1-x) } // ease out
 
 	// The ring swells from the heart and thins away, in the first half.
+	// Draw it as a rounded border quad on the GPU SDF shader rather than
+	// rasterizing a vector path on the CPU each animation frame.
 	if rt := t * 2; rt < 1 {
 		radius := size * (0.35 + 0.65*out(rt))
 		width := size * 0.22 * (1 - rt)
-		ring := (&ui.Path{}).Circle(cx, cy, radius)
-		p.StrokePath(ring, width, accent.Alpha(0.9*(1-rt)))
+		outer := radius + width/2
+		p.Stroke(ui.Rect{X: cx - outer, Y: cy - outer, W: 2 * outer, H: 2 * outer}, accent.Alpha(0.9*(1-rt)), outer, width)
 	}
 
 	// Two rings of confetti fly out, slowing, shrinking and fading; the

@@ -2,10 +2,12 @@ package app
 
 import (
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/shader"
 
 	"netease-music-mygo/internal/netease"
 	"netease-music-mygo/internal/player"
@@ -317,22 +319,45 @@ func (n *notch) pollAgain(inside bool) {
 	})
 }
 
-// shape returns the outline of the housing grown to w×h: straight sides
-// that flare into the top edge, and a rounded foot.
-func shape(cx, w, h, flare, foot float32) *ui.Path {
-	const k = 0.5523 // a quarter circle's control points
-	l, r := cx-w/2, cx+w/2
-	p := &ui.Path{}
-	p.MoveTo(l-flare, 0)
-	p.CubeTo(l-flare+flare*k, 0, l, flare-flare*k, l, flare)
-	p.LineTo(l, h-foot)
-	p.CubeTo(l, h-foot+foot*k, l+foot-foot*k, h, l+foot, h)
-	p.LineTo(r-foot, h)
-	p.CubeTo(r-foot+foot*k, h, r, h-foot+foot*k, r, h-foot)
-	p.LineTo(r, flare)
-	p.CubeTo(r, flare-flare*k, r+flare-flare*k, 0, r+flare, 0)
-	p.Close()
-	return p
+// notchSource draws the flared notch housing analytically on the GPU:
+// straight sides flaring into the top edge by concave quarter-circles of
+// radius Flare, and a rounded foot of radius Foot, without per-frame CPU
+// path rasterization.
+const notchSource = `package main
+
+var Width float
+var Height float
+var Flare float
+var Foot float
+
+func Fragment(dst vec4, pos vec2) vec4 {
+	hw := Width * 0.5
+	x := abs(pos.x - rectSize().x*0.5)
+	y := pos.y
+	r := min(Foot, min(hw, Height))
+	d := x - hw
+	if Flare > 0.0 && y < Flare {
+		d = max(Flare-length(vec2(x-(hw+Flare), y-Flare)), x-(hw+Flare))
+	}
+	if y > Height-r && x > hw-r {
+		d = max(d, length(vec2(x-(hw-r), y-(Height-r)))-r)
+	} else {
+		d = max(d, y-Height)
+	}
+	a := clamp(0.5-d*pixelScale(), 0.0, 1.0)
+	return vec4(0.0, 0.0, 0.0, a)
+}
+`
+
+var notchShader = sync.OnceValue(func() *shader.Shader { return shader.MustCompile(notchSource) })
+
+// paintNotch draws the notch housing centered at cx, grown to w×h.
+func paintNotch(p *ui.Painter, cx, w, h, flare, foot float32) {
+	pad := float32(1)
+	rect := ui.Rect{X: cx - w/2 - flare - pad, Y: 0, W: w + 2*(flare+pad), H: h + pad}
+	notchShader().Draw(p, rect, shader.Options{Uniforms: map[string]any{
+		"Width": w, "Height": h, "Flare": flare, "Foot": foot,
+	}})
 }
 
 func (n *notch) view(c *ui.Context) {
@@ -364,11 +389,10 @@ func (n *notch) view(c *ui.Context) {
 		if w < 1 || h < 1 {
 			return
 		}
-		path := shape(r.X+cx, w, h, flare, foot)
 		if open > 0.05 {
 			p.Shadow(ui.Rect{X: r.X + cx - w/2, Y: r.Y + h - 40, W: w, H: 40}, foot, 0, 14, 30, -6, ui.RGBA(0, 0, 0, 0.45*open))
 		}
-		p.FillPath(path, ui.RGB(0, 0, 0))
+		paintNotch(p, r.X+cx, w, h, flare, foot)
 	})
 	stage.Children(func() {
 		body := ui.Box(c).Absolute().Top(0).Left(cx-w/2).Size(w, h).Radius(0, 0, foot, foot).Clip().TextColor(white)

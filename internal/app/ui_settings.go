@@ -99,9 +99,9 @@ func (a *app) changed() {
 func (a *app) settingsPanel(c *ui.Context) {
 	w, h := c.Size()
 	ink := a.inkOn(false)
-	a.dialog(c, "settings", 0.3, &a.settingsView.open, func(panel ui.Element) {
+	a.dialogAt(c, "settings", 0.3, &a.settingsView.open, 0, 1, func(panel ui.Element) {
 		// It grows from the corner of who listens, whose row opens it.
-		panel.Width(min(940, w-48)).Height(max(h-72, 320)).TextColor(ink.text).Label("设置").TransformOrigin(0, 1)
+		panel.Width(min(940, w-48)).Height(max(h-72, 320)).TextColor(ink.text).Label("设置")
 		a.pane(panel, 26, false)
 		panel.Children(func() {
 			ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {

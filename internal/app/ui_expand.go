@@ -2,9 +2,11 @@ package app
 
 import (
 	"math"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/shader"
 
 	"netease-music-mygo/internal/netease"
 )
@@ -270,6 +272,14 @@ func (a *app) paneMotion(panel ui.Element) {
 // by its color, dim at most, not its opacity: that would take the panel with
 // it, whose glass would see nothing through it until the last frame.
 func (a *app) dialog(c *ui.Context, key string, dim float32, open *bool, fn func(panel ui.Element)) {
+	a.dialogAt(c, key, dim, open, 0.5, 0.5, fn)
+}
+
+// dialogAt is dialog scaling from the transform origin (ox, oy). While the
+// panel scales, its body renders into a cached GPU layer so scroll panes,
+// inputs and clipped controls inside it don't rasterize clip masks on the CPU
+// every frame, while the outer panel keeps its live glass backdrop material.
+func (a *app) dialogAt(c *ui.Context, key string, dim float32, open *bool, ox, oy float32, fn func(panel ui.Element)) {
 	stage := ui.Box(c.Key(key+"-stage")).Absolute().Size(0, 0).PassThrough()
 	k := b2f(*open)
 	if a.motion != motionOff {
@@ -281,10 +291,21 @@ func (a *app) dialog(c *ui.Context, key string, dim float32, open *bool, fn func
 	shown := true
 	ui.DialogBase(c.Key(key), &shown, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, dim*k))
-		fn(panel)
+		if ox != 0.5 || oy != 0.5 {
+			panel.TransformOrigin(ox, oy)
+		}
+		scaling := k < 1 && a.motion == motionFull
+		body := ui.Column(c.Key("dialog-body"))
+		if scaling {
+			body.Cache()
+		}
+		prevHost, prevTarget := a.paneHost, a.paneTarget
+		a.paneHost, a.paneTarget = panel, body
+		body.Children(func() { fn(body) })
+		a.paneHost, a.paneTarget = prevHost, prevTarget
 		if k < 1 {
 			panel.Opacity(k)
-			if a.motion == motionFull {
+			if scaling {
 				s := lerp(0.92, 1, k)
 				panel.Scale(s, s)
 			}
@@ -464,6 +485,47 @@ func (s *discState) at(now time.Time) float32 {
 // spins reports whether the bar's cover turns.
 func (a *app) spins() bool { return a.settings.BarSpin && a.motion == motionFull }
 
+// discSource draws a rotated circular cover on the GPU (cover-fitted into r
+// and rounded by Options.Radius), avoiding a rounded p.Clip around a rotating
+// p.Transform that would otherwise rasterize a clip mask on the CPU.
+const discSource = `package main
+
+var Angle float
+var Alpha float
+
+func Fragment(dst vec4, pos vec2) vec4 {
+	size := rectSize()
+	img := image0Size()
+	if img.x <= 0.0 || img.y <= 0.0 || Alpha <= 0.0 {
+		return vec4(0)
+	}
+	q := pos - size*0.5
+	c := cos(-Angle)
+	s := sin(-Angle)
+	rot := vec2(q.x*c-q.y*s, q.x*s+q.y*c)
+	scale := max(size.x/img.x, size.y/img.y)
+	uv := rot/scale + img*0.5
+	return image0Sample(uv) * Alpha
+}
+`
+
+var discShader = sync.OnceValue(func() *shader.Shader { return shader.MustCompile(discSource) })
+
+// paintDisc draws bmp rotated by angle degrees inside a circle fitting r.
+func paintDisc(p *ui.Painter, r ui.Rect, bmp *ui.Bitmap, angle, alpha float32) {
+	if bmp == nil || alpha <= 0 || r.W <= 0 || r.H <= 0 {
+		return
+	}
+	discShader().Draw(p, r, shader.Options{
+		Radius: r.W / 2,
+		Images: [4]*ui.Bitmap{bmp},
+		Uniforms: map[string]any{
+			"Angle": angle * float32(math.Pi/180),
+			"Alpha": alpha,
+		},
+	})
+}
+
 // barDisc is the cover in the bar as a record, which turns as music plays and
 // coasts to a stop as it pauses. It is drawn alone, a few times a second, for
 // nothing else to be painted for it.
@@ -483,14 +545,7 @@ func (a *app) barDisc(c *ui.Context, tr *netease.Track, size float32, frame time
 		if s.on || now.Sub(s.since) < time.Duration(4*discCoast*float64(time.Second)) {
 			p.After(frame)
 		}
-		if bmp == nil {
-			return
-		}
-		p.Clip(r, r.W/2, func() {
-			p.Transform(ui.Rotation(s.at(now)), r.X+r.W/2, r.Y+r.H/2, func() {
-				p.ImageRegion(bmp, ui.Rect{}, r, ui.ImageOptions{Tint: white.Alpha(in)})
-			})
-		})
+		paintDisc(p, r, bmp, s.at(now), in)
 	})
 	return box
 }

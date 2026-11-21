@@ -365,10 +365,15 @@ func (a *app) homeDeck(c *ui.Context, now time.Time) {
 			}
 			sheet.Translate(0, y).Opacity(show)
 			sheet.Children(func() {
-				page(pg, true)
-				deckHoles(c)
+				// Static back pages render once into a cached GPU layer so
+				// their binder holes and rounded clips don't multiply draw
+				// batches under the front card.
+				ui.Box(c.Key("face")).Fill().Cache().Children(func() {
+					page(pg, true)
+					deckHoles(c)
+					deckEdge(c)
+				})
 				deckShade(c, 0.32*(float32(depth)-up))
-				deckEdge(c)
 			})
 		}
 
@@ -407,15 +412,25 @@ func (a *app) homeDeck(c *ui.Context, now time.Time) {
 		}
 		dim := 0.32 * rise / deckPeek
 		sheet.Translate(0, rise)
-		if lift > 0.0005 {
+		lifted3D := lift > 0.0005
+		if lifted3D {
 			sheet.TransformOrigin(0.5, origin).RotateX(deckLift(lift)).Perspective(deckDepth)
 		}
 		sheet.Children(func() {
-			page(front, false)
-			deckHoles(c)
+			// While tilted in 3D or rising during a flip, cache the card face
+			// on the GPU so its rounded backdrop clip, binder holes and bottom
+			// edge don't rasterize clip masks on the CPU every frame.
+			face := ui.Box(c.Key("face")).Fill()
+			if lifted3D || d.flipping {
+				face.Cache()
+			}
+			face.Children(func() {
+				page(front, false)
+				deckHoles(c)
+				deckEdge(c)
+			})
 			// Its face turns from the light as it lifts.
 			deckShade(c, dim+0.3*lift)
-			deckEdge(c)
 		})
 
 		// The shadow the lifted page casts on the one under it.
@@ -469,10 +484,12 @@ func (a *app) homeDeck(c *ui.Context, now time.Time) {
 			leaf.TransformOrigin(0.5, origin).RotateX(deckLift(l)).Perspective(deckDepth)
 			leaf.Opacity(clamp01((0.97 - l) / 0.12))
 			leaf.Children(func() {
-				page(pg, true)
-				deckHoles(c)
+				ui.Box(c.Key("face")).Fill().Cache().Children(func() {
+					page(pg, true)
+					deckHoles(c)
+					deckEdge(c)
+				})
 				deckShade(c, 0.3*l)
-				deckEdge(c)
 			})
 			if l >= 0.97 {
 				d.flipping = false

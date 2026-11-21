@@ -248,6 +248,7 @@ type app struct {
 	quiet                 quietState   // the quiet parts of the song playing, for its hot comments
 	captions              captionState // the episode playing's captions, and the model that writes them
 	sig                   playerSig
+	paneHost, paneTarget  ui.Element // dialog surface hosting a.pane while its body caches during scale
 	quitting              bool
 
 	settings     settings

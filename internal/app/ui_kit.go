@@ -2,16 +2,50 @@ package app
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/egoist/mygo/ui/shader"
 
 	"netease-music-mygo/internal/netease"
 	"netease-music-mygo/internal/player"
 )
 
-// scrollEdgeFade changes the alpha of the scrolled content itself. Narrow
-// bands blend the layer on the GPU and CPU without drawing a colored veil.
+// scrollEdgeFadeSource fades the top and bottom edges of a scrolled layer's
+// alpha per pixel on the GPU, replacing stepped band quads with one pass.
+const scrollEdgeFadeSource = `package main
+
+var Depth float
+var Top float
+var Bottom float
+
+func ease(v float, a float, b float) float {
+	t := clamp((v-a)/(b-a), 0.0, 1.0)
+	return t * t * (3.0 - 2.0*t)
+}
+
+func ColorEffect(pos vec2, color vec4) vec4 {
+	h := rectSize().y
+	edge := min(Depth, h*0.25)
+	if edge <= 0.0 {
+		return color
+	}
+	a := 1.0
+	if Top > 0.0 && pos.y < edge {
+		a *= mix(1.0, ease(pos.y, 0.0, edge), Top)
+	}
+	if Bottom > 0.0 && pos.y > h-edge {
+		a *= mix(1.0, ease(h-pos.y, 0.0, edge), Bottom)
+	}
+	return color * a
+}
+`
+
+var scrollEdgeFadeShader = sync.OnceValue(func() *shader.Shader { return shader.MustCompile(scrollEdgeFadeSource) })
+
+// scrollEdgeFade changes the alpha of the scrolled content itself without
+// drawing a colored veil, running as a single GPU ColorEffect pass.
 type scrollEdgeFade struct {
 	depth, top, bottom float32
 }
@@ -19,32 +53,15 @@ type scrollEdgeFade struct {
 func (scrollEdgeFade) EffectMargin() ui.Point { return ui.Point{} }
 
 func (f scrollEdgeFade) PaintEffect(p *ui.Painter, box ui.Rect, content *ui.Bitmap, inset ui.Point) {
-	scale := p.Scale()
-	draw := func(from, to, alpha float32) {
-		src := ui.Rect{X: inset.X, Y: inset.Y + from*scale, W: box.W * scale, H: (to - from) * scale}
-		dst := ui.Rect{X: box.X, Y: box.Y + from, W: box.W, H: to - from}
-		p.ImageRegion(content, src, dst, ui.ImageOptions{Tint: white.Alpha(alpha)})
+	if f.top <= 0 && f.bottom <= 0 {
+		scale := p.Scale()
+		src := ui.Rect{X: inset.X, Y: inset.Y, W: box.W * scale, H: box.H * scale}
+		p.ImageRegion(content, src, box, ui.ImageOptions{})
+		return
 	}
-	edge := min(f.depth, box.H/4)
-	top, bottom := float32(0), box.H
-	if f.top > 0 {
-		top = edge
-	}
-	if f.bottom > 0 {
-		bottom -= edge
-	}
-	draw(top, bottom, 1)
-	const bands = 24
-	for i := range bands {
-		from, to := edge*float32(i)/bands, edge*float32(i+1)/bands
-		alpha := easeRange((from+to)/2, 0, edge)
-		if f.top > 0 {
-			draw(from, to, lerp(1, alpha, f.top))
-		}
-		if f.bottom > 0 {
-			draw(box.H-to, box.H-from, lerp(1, alpha, f.bottom))
-		}
-	}
+	scrollEdgeFadeShader().Effect(shader.Options{Uniforms: map[string]any{
+		"Depth": f.depth, "Top": f.top, "Bottom": f.bottom,
+	}}).PaintEffect(p, box, content, inset)
 }
 
 // palette holds the app's colors, for the light and the dark appearance.
