@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"netease-music-mygo/internal/netease"
@@ -209,5 +210,74 @@ func TestGlassBackgroundRests(t *testing.T) {
 		if tt.FramePending() {
 			t.Fatal("static cover background is still asking for frames")
 		}
+	}
+}
+
+// Liquid glass used to barely blur panes and left a near-clear middle, letting
+// underlying text clash with settings, menus and floating bars.
+func TestLiquidGlassStaysFrosted(t *testing.T) {
+	a := newTestApp()
+	a.settings = defaultSettings()
+	a.settings.GlobalGlass = true
+	paneBox := ui.Rect{W: 900, H: 680}
+	barBox := ui.Rect{W: 900, H: 70}
+
+	for _, dark := range []bool{false, true} {
+		for _, tc := range []struct {
+			name    string
+			surface bool
+			box     ui.Rect
+			radius  float32
+			minBlur float32
+			minVeil float32
+		}{
+			{"pane", true, paneBox, 26, 10, 0.30},
+			{"bar", false, barBox, 35, 6, 0.20},
+		} {
+			var prevBlur, prevVeil float32
+			for i, clear := range []float64{0, 0.6, 1} {
+				a.settings.GlassClear = clear
+				g := a.floatGlass(dark)
+				if tc.surface {
+					g = a.interfaceGlass(dark)
+				}
+				opts := g.shaderOptions(tc.box, tc.radius)
+				if opts.BackdropBlur < tc.minBlur {
+					t.Errorf("%s dark=%v clear=%.1f blur=%v, want >= %v", tc.name, dark, clear, opts.BackdropBlur, tc.minBlur)
+				}
+				veil := opts.Uniforms["Veil"].(float32)
+				if veil < tc.minVeil {
+					t.Errorf("%s dark=%v clear=%.1f veil=%v, want >= %v", tc.name, dark, clear, veil, tc.minVeil)
+				}
+				tone := opts.Uniforms["Tone"].([]float32)
+				if dark && tone[1] > 0.55 {
+					t.Errorf("%s dark clear=%.1f tone high=%v washes out white text", tc.name, clear, tone[1])
+				}
+				if !dark && tone[0] < 0.45 {
+					t.Errorf("%s light clear=%.1f tone low=%v washes out dark text", tc.name, clear, tone[0])
+				}
+				if i > 0 && (opts.BackdropBlur >= prevBlur || veil >= prevVeil) {
+					t.Errorf("%s dark=%v clear=%.1f did not lighten frost monotonically", tc.name, dark, clear)
+				}
+				prevBlur, prevVeil = opts.BackdropBlur, veil
+			}
+		}
+	}
+}
+
+// Global glass used to ask for VibrancyGlassClear, whose barely-frosted
+// backdrop hurt readability on macOS.
+func TestGlobalGlassUsesFrostedWindowMaterial(t *testing.T) {
+	s := defaultSettings()
+	if got := s.mainWindowMaterial(); got != mygo.VibrancySidebar {
+		t.Fatalf("default material = %q, want %q", got, mygo.VibrancySidebar)
+	}
+	s.GlobalGlass = true
+	if got := s.mainWindowMaterial(); got != mygo.VibrancyGlass {
+		t.Fatalf("global glass material = %q, want %q", got, mygo.VibrancyGlass)
+	}
+	s.PowerSaver = true
+	if got := s.mainWindowMaterial(); got != mygo.VibrancyNone {
+		t.Fatalf("power saver material = %q, want %q", got, mygo.VibrancyNone)
 	}
 }

@@ -398,7 +398,7 @@ func (a *app) materialGroup(k *settingsKit) {
 	c, s := k.c, &a.settings
 	sv := &a.settingsView
 	k.group("材质", func() {
-		k.block("材质 纯色 封面色 液态玻璃 玻璃 背景", func() {
+		k.block("材质 纯色 封面色 液态玻璃 毛玻璃 玻璃 背景", func() {
 			tint, dark := a.thumbTint(), a.pal.dark
 			picked, ok := a.choiceCards(c, "material-cards", "材质", []string{"纯色", "封面色", "液态玻璃"}, s.material(), 3, func(i int) {
 				ui.Box(c.Key("material")).Height(thumbHeight).Draw(func(p *ui.Painter, r ui.Rect) {
@@ -433,7 +433,7 @@ func (a *app) materialGroup(k *settingsKit) {
 		})
 		// What it opens: in a drawer, but as rows where a search looks.
 		parts := func() {
-			k.sub("全局液态玻璃", "通透的封面色背景，播放栏、菜单和对话框用折射玻璃", true, func() {
+			k.sub("全局液态玻璃", "通透的封面色背景，播放栏、菜单和对话框用液态毛玻璃", true, func() {
 				on := s.GlobalGlass
 				if settingSwitch(c.Key("global-glass"), &on).Label("切换全局液态玻璃").Changed() {
 					if on {
@@ -468,7 +468,7 @@ func (a *app) materialGroup(k *settingsKit) {
 			k.sub("主界面封面色背景", "", true, func() {
 				part("main-glass", "主界面封面色背景", &s.MainGlass, coverOn(&s.MainGlass))
 			})
-			k.sub("液态玻璃播放栏", "悬浮的玻璃胶囊，折射其下的内容", true, func() {
+			k.sub("液态玻璃播放栏", "悬浮的毛玻璃胶囊，折射其下的内容", true, func() {
 				part("liquid-glass", "液态玻璃播放栏", &s.LiquidGlass, a.leavePowerSaver)
 			})
 			k.sub("界面玻璃", "菜单、弹窗和设置面板使用玻璃材质", true, func() {

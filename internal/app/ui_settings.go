@@ -132,7 +132,7 @@ func (a *app) globalGlassDialog(c *ui.Context) {
 			dialogHeader(c, ink, "开启全局液态玻璃？", "", func() { sv.confirmGlass = false })
 			ui.Row(c).PaddingX(28).Gap(8).AlignItems(ui.Start).Children(func() {
 				ui.Icon(c, iconWarn).Size(16, 16).Shrink(0).TextColor(warnColor)
-				ui.Text(c, "实时折射会增加性能开销，部分背景下文字可能略难读。").
+				ui.Text(c, "实时折射与毛玻璃模糊会增加性能开销。").
 					FontSize(13).LineHeight(1.4).TextColor(ink.muted).Shrink(1).MinWidth(0)
 			})
 			dialogFooter(c, func() {

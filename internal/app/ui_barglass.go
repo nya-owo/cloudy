@@ -8,28 +8,27 @@ import (
 	"github.com/egoist/mygo/ui/shader"
 )
 
-// barGlass is the glass of the player bar: clearer and bending what shows
-// through more than the glass plugin's, whose refraction is fixed. It follows
-// the plugin's optics (its lens, normal and tone, see glass.hlsl), with these
-// to tell it from them:
+// barGlass is the liquid frosted glass of the floating bars and, with global
+// glass on, of the app's panes. It follows the glass plugin's optics (its
+// lens, normal and tone, see glass.hlsl), with these to tell it from them:
 //
-//   - it hardly blurs, so that what is under the bar can be read through its
-//     flat middle;
+//   - it blurs what shows through into soft frost, heavier on panes than on
+//     the narrow floating bars, so underlying text and covers dissolve cleanly
+//     behind foreground labels and controls;
 //   - its curve reaches further in, on a rounder profile, and bends further,
-//     so that the edges of the capsule visibly swim;
+//     so that the edges of the capsule and panels visibly swim;
 //   - red and blue bend a little apart, as through a thick lens;
-//   - in place of a tint over everything, the lightness of what shows through
-//     is squeezed: dark stays as it is, and only what is bright, which would
-//     drown the bar's own words, comes down.
+//   - what shows through is tone-mapped and softened by a frosted veil so
+//     bright covers in dark mode and dark covers in light mode keep contrast.
 //
-// clear and bend, from 0 to 1, are the listener's: clearer, it blurs less and
-// lets more of what is bright through; bent more, the edge bends further, and
-// its curve reaches further in. At 0.5 they are the glass as it was tuned.
+// clear and bend, from 0 to 1, are the listener's: clearer, the frost is
+// lighter and lets more color through while staying legible; bent more, the
+// edge bends further, and its curve reaches further in.
 type barGlass struct {
 	dark        bool
 	clear, bend float32
-	surface     bool // use the same optics on a rounded panel
-	translucent bool // let the native window material show through
+	surface     bool // use frosted panel tuning on menus, dialogs and settings
+	translucent bool // unpremultiply translucent cover backdrops before toning
 }
 
 func (a *app) interfaceGlass(dark bool) barGlass {
@@ -46,10 +45,10 @@ func (a *app) floatGlass(dark bool) barGlass {
 		translucent: a.settings.GlobalGlass || a.settings.mainGlass()}
 }
 
-// How the glass of the bar looks, whatever the listener chose.
+// How the glass looks, whatever the listener chose.
 const (
 	barGlassSpread  = 0.05 // how far apart red and blue bend, of the bend
-	barGlassRim     = 0.5  // how lit the rim is
+	barGlassRim     = 0.48 // how lit the rim is
 	barGlassRimWide = 1.1  // how wide it is, in DIPs
 )
 
@@ -64,7 +63,9 @@ var Tone vec4
 var Ink vec4
 var Corner float
 var Surface float
-var Film float
+var Translucent float
+var Veil float
+var Sheen float
 
 // edge returns the inward distance and outward normal of a rounded rectangle.
 func edge(pos, half vec2) vec3 {
@@ -123,48 +124,119 @@ func Fragment(dst vec4, pos vec2) vec4 {
 	g := backdropSample(pos - bend)
 	b := backdropSample(pos - bend*(1.0-Spread))
 	c := tone(vec3(r.r, g.g, b.b))
-	alpha := Film
-	if Film < 1.0 {
-		// Keep a clear pane translucent where the compositor will supply
-		// the desktop. Where the app fills the backdrop, show the refracted
-		// image at full strength, as the original capsule does.
+	if Translucent > 0.0 {
+		// Unpremultiply the translucent cover backdrop before tone mapping so
+		// clear parts of the page blend into the frosted tint instead of dark.
 		rgb := vec3(r.r/max(r.a, 0.01), g.g/max(g.a, 0.01), b.b/max(b.a, 0.01))
 		c = mix(Ink.rgb, tone(rgb), g.a)
-		alpha = mix(Film, 1.0, g.a)
 	}
-	// Under what plays and the buttons at the end, what shows through keeps
-	// to itself: words over words can't be read, however clear the glass.
-	width := rectSize().x
-	side := max(width*0.5-220.0, 130.0)
-	under := max(1.0-smoothstep(side*0.72, side*1.02, pos.x), 0.7*smoothstep(width-side*0.6, width-side*0.35, pos.x))
-	c = mix(c, Ink.rgb, Ink.a*mix(under, 0.18, Surface))
+	// Frost the interior enough that foreground text stays readable over vivid
+	// covers and scrolling rows, while easing the veil slightly on the outer
+	// bevel so liquid edge refraction stays lively.
+	bezelFrac := smoothstep(0.0, max(bezel, 1.0), t)
+	veil := Veil * mix(0.76, 1.0, bezelFrac)
+	if Surface <= 0.0 {
+		// Under what plays and the buttons at the ends of the capsule, keep an
+		// extra veil so song titles stay crisp while the middle still breathes.
+		width := rectSize().x
+		side := max(width*0.5-220.0, 130.0)
+		under := max(1.0-smoothstep(side*0.72, side*1.02, pos.x), 0.7*smoothstep(width-side*0.6, width-side*0.35, pos.x))
+		veil = max(veil, Ink.a*under)
+	}
+	c = mix(c, Ink.rgb, clamp(veil, 0.0, 0.92))
+	// A soft frosted catchlight inside the curved bezel keeps the thick glass
+	// silhouette tactile even over dark regions.
+	if Sheen > 0.0 && t < bezel {
+		edgeGlow := (1.0 - bezelFrac) * (1.0 - bezelFrac)
+		c = mix(c, vec3(1.0), Sheen*edgeGlow*(0.35+0.65*abs(n.y)))
+	}
 	// The rim, a hairline lit where it faces up or down, and shaded where
 	// it faces the sides.
 	if Rim > 0.0 && t < 3.0*RimWide {
 		x := t / RimWide
 		c += (vec3(abs(n.y)) - c) * Rim * exp(-x*x)
 	}
-	return vec4(c * alpha, alpha)
+	// Output full alpha so the renderer replaces, rather than SRC_OVER-blends
+	// over, the unblurred pixels beneath the pane.
+	return vec4(c, 1.0)
 }
 `
 
 var barGlassShader = sync.OnceValue(func() *shader.Shader { return shader.MustCompile(barGlassSource) })
 
-// PaintMaterial paints the glass over box, a capsule by radii. On the CPU the
-// shader, which runs interpreted, would take a good part of a second a frame:
-// there it is the plugin's glass, which is drawn natively.
+// shaderOptions computes the frosted liquid glass shader options for box.
+func (g barGlass) shaderOptions(box ui.Rect, radius float32) shader.Options {
+	clear := clamp01(g.clear)
+	bendLevel := clamp01(g.bend)
+
+	// The lightness of black and white through the frosted glass, how it bends
+	// between them, and how much of its color it keeps.
+	var tone [4]float32
+	var ink [4]float32
+	var blur, veil, sheen float32
+	rim := float32(barGlassRim)
+
+	if g.surface {
+		blur = lerp(20, 11, clear)
+		if g.dark {
+			tone = [4]float32{0.06, lerp(0.28, 0.48, clear), 1.3, 1.85}
+			ink = [4]float32{0.10, 0.105, 0.125, 0.85}
+			veil = lerp(0.56, 0.32, clear)
+			sheen = 0.08
+		} else {
+			tone = [4]float32{lerp(0.74, 0.52, clear), 0.99, 1.15, 1.25}
+			ink = [4]float32{0.965, 0.97, 0.98, 0.85}
+			veil = lerp(0.56, 0.34, clear)
+			sheen = 0.14
+			rim = 0.32
+		}
+	} else {
+		blur = lerp(14, 6.5, clear)
+		if g.dark {
+			tone = [4]float32{0.06, lerp(0.30, 0.52, clear), 1.35, 2.0}
+			ink = [4]float32{0.09, 0.095, 0.115, lerp(0.84, 0.68, clear)}
+			veil = lerp(0.46, 0.22, clear)
+			sheen = 0.10
+		} else {
+			tone = [4]float32{lerp(0.70, 0.48, clear), 0.99, 1.15, 1.35}
+			ink = [4]float32{0.965, 0.97, 0.98, lerp(0.84, 0.68, clear)}
+			veil = lerp(0.46, 0.24, clear)
+			sheen = 0.18
+			rim = 0.36
+		}
+	}
+
+	translucent, surface, bend := float32(0), float32(0), 144*bendLevel
+	if g.translucent {
+		translucent = 1
+	}
+	if g.surface {
+		surface = 1
+		bend = min(bend, 1.2*min(box.W, box.H)*bendLevel, 76*bendLevel)
+	}
+	return shader.Options{Radius: radius, BackdropBlur: blur, Uniforms: map[string]any{
+		"Bend": bend, "Bezel": 0.33 + 0.66*bendLevel, "Spread": barGlassSpread,
+		"Rim": rim, "RimWide": barGlassRimWide, "Tone": tone[:], "Ink": ink[:],
+		"Corner": radius, "Surface": surface, "Translucent": translucent, "Veil": veil, "Sheen": sheen,
+	}}
+}
+
+// PaintMaterial paints the liquid frosted glass over box, rounded by radii. On
+// the CPU the shader, which runs interpreted, would take a good part of a
+// second a frame: there it is the plugin's frosted glass, which is drawn
+// natively.
 func (g barGlass) PaintMaterial(p *ui.Painter, box ui.Rect, radii [4]float32) {
 	if !p.Accelerated() {
-		alpha := float32(0.24)
+		alpha := float32(0.42)
 		if g.dark {
-			alpha = 0.32
+			alpha = 0.48
 		}
 		if g.surface {
 			alpha = 0.78 // Keep words behind a software-rendered dialog from competing with its text.
 		}
 		tint := white.Alpha(alpha)
 		if g.dark {
-			tint = ui.RGBA(0, 0, 0, alpha)
+			tint = ui.RGBA(14, 14, 18, alpha)
 		}
 		if g.translucent && !g.surface {
 			// The native backdrop can still show through on software rendering.
@@ -175,30 +247,5 @@ func (g barGlass) PaintMaterial(p *ui.Painter, box ui.Rect, radii [4]float32) {
 		}
 		return
 	}
-	// The lightness of black and white through it, how it bends between
-	// them, and how much of its colors it keeps.
-	tone := [4]float32{0.62 - 0.4*g.clear, 1, 1.2, 1.35}
-	if g.dark {
-		tone = [4]float32{0.03, 0.32 + 0.48*g.clear, 1.5, 2.4}
-	}
-	blur := 2.8 * (1 - g.clear) * (1 - g.clear)
-	ink := [4]float32{0.97, 0.97, 0.98, 0.85}
-	if g.dark {
-		ink = [4]float32{0.05, 0.05, 0.06, 0.85}
-	}
-	film, surface, bend := float32(1), float32(0), 144*g.bend
-	if g.translucent {
-		film = lerp(0.8, 0.36, clamp01(g.clear))
-	}
-	if g.surface {
-		surface = 1
-		bend = min(bend, 1.2*min(box.W, box.H)*g.bend, 76*g.bend)
-	}
-	options := shader.Options{Radius: radii[0], BackdropBlur: blur, Uniforms: map[string]any{
-		"Bend": bend, "Bezel": 0.33 + 0.66*g.bend, "Spread": barGlassSpread,
-		"Rim": barGlassRim, "RimWide": barGlassRimWide, "Tone": tone[:], "Ink": ink[:],
-		"Corner": radii[0], "Surface": surface, "Film": film,
-	}}
-
-	barGlassShader().Draw(p, box, options)
+	barGlassShader().Draw(p, box, g.shaderOptions(box, radii[0]))
 }

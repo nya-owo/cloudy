@@ -264,15 +264,15 @@ func (s settings) sidebarGlass() bool { return !s.PowerSaver && (s.GlobalGlass |
 func (s settings) mainGlass() bool    { return !s.PowerSaver && (s.GlobalGlass || s.MainGlass) }
 
 // mainWindowMaterial keeps the sidebar's material (Mica on Windows 11)
-// under the cover-colored background: the clear one (Acrylic) shows the
-// desktop through, costs more, and darkens the light appearance over a
-// dark desktop. Only global glass, which asks first, takes the clear one.
+// under the cover-colored background: Acrylic / frosted Liquid Glass shows the
+// desktop through, costs more, and darkens the light appearance over a dark
+// desktop. Only global glass, which asks first, takes the frosted glass one.
 func (s settings) mainWindowMaterial() mygo.Vibrancy {
 	if s.PowerSaver {
 		return mygo.VibrancyNone
 	}
 	if s.GlobalGlass {
-		return mygo.VibrancyGlassClear
+		return mygo.VibrancyGlass
 	}
 	return mygo.VibrancySidebar
 }
