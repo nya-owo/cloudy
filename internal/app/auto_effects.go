@@ -81,6 +81,7 @@ func (a *app) autoFollow() {
 				a.auto.cache = map[int64][2][]string{}
 			}
 			a.auto.cache[id] = [2][]string{genres, moods}
+			a.trimAutoCache()
 			if a.auto.song == id && a.autoOn() {
 				a.autoChoose(genres, moods, &song)
 			}

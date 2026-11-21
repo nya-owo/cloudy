@@ -1,7 +1,9 @@
 package app
 
 import (
+	"os"
 	"runtime"
+	"runtime/debug"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -281,6 +283,8 @@ type app struct {
 	radar         radarState // NetEase's radars on the home page
 	lyricDownload lyricDownloadState
 	progressAt    progressShown // what the taskbar button last showed of the song
+	freeMemTimer  *time.Timer
+	freeMemGen    int
 }
 
 // post runs fn on the main thread and redraws both windows. Without a
@@ -348,6 +352,11 @@ func (a *app) showMain() {
 
 // Run runs the app until it quits.
 func Run() error {
+	// Tune GC pacing for a long-running desktop player so bursty FLAC decode
+	// allocations do not double the live heap before collection.
+	if os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(50)
+	}
 	a := &app{
 		playlists:  map[int64]*netease.Playlist{},
 		loadingPl:  map[int64]bool{},
@@ -446,8 +455,17 @@ func Run() error {
 		// From the menu bar alone, the Dock icon shows while the window
 		// does.
 		a.syncDock()
-		a.win.OnShow(a.syncDock)
-		a.win.OnHide(a.syncDock)
+		a.win.OnShow(func() {
+			a.cancelMemoryReclaim()
+			a.syncDock()
+		})
+		a.win.OnHide(func() {
+			a.syncDock()
+			a.releaseHiddenMemory(true)
+		})
+		a.win.OnMinimize(func() {
+			a.releaseHiddenMemory(false)
+		})
 		// Shown or switched to the morning after, it shows the new day's.
 		a.win.OnFocus(a.freshenPersonal)
 		a.listenForDrops()

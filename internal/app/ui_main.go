@@ -282,6 +282,9 @@ func (a *app) open(r route) {
 		return
 	}
 	a.history, a.forward = append(a.history, a.route), nil
+	if len(a.history) > maxNavHistory {
+		a.history = append(a.history[:0], a.history[len(a.history)-maxNavHistory:]...)
+	}
 	a.show(r)
 }
 
@@ -307,6 +310,7 @@ func (a *app) show(r route) {
 		a.query, a.searched = r.query, r
 	}
 	a.load(r)
+	a.trimPageCaches()
 }
 
 // load loads what the page of r shows, unless it has.

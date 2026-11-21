@@ -897,15 +897,20 @@ func frameSize(b []byte) int {
 // chunk playing.
 
 const (
-	fftSize = 1024
-	Bands   = 24
+	fftSize       = 1024
+	Bands         = 24
+	spectrumSlots = 512 // ~5.5 s at 96 kHz, ~11.9 s at 44.1 kHz (~56 KB fixed)
 )
+
+type spectrumSlot struct {
+	chunk int64 // chunk index stored in this slot, or -1 if empty
+	bands [Bands]float32
+}
 
 type spectrum struct {
 	mu     sync.RWMutex
 	rate   int
-	chunks [][Bands]float32
-	have   []bool
+	slots  [spectrumSlots]spectrumSlot
 	window [fftSize]float32
 	acc    []float32 // mono samples of the chunk being filled
 	accAt  int64     // its first frame
@@ -913,9 +918,11 @@ type spectrum struct {
 	fft    []complex128
 }
 
-func newSpectrum(rate int, frames int64) *spectrum {
-	n := int(frames/fftSize) + 2
-	s := &spectrum{rate: rate, chunks: make([][Bands]float32, n), have: make([]bool, n), accAt: -1}
+func newSpectrum(rate int, _ int64) *spectrum {
+	s := &spectrum{rate: rate, accAt: -1}
+	for i := range s.slots {
+		s.slots[i].chunk = -1
+	}
 	for i := range s.window {
 		s.window[i] = float32(0.5 - 0.5*math.Cos(2*math.Pi*float64(i)/float64(fftSize-1)))
 	}
@@ -961,7 +968,7 @@ func (s *spectrum) feed(at int64, stereo []float32) {
 }
 
 func (s *spectrum) analyze(chunk int64) {
-	if chunk < 0 || chunk >= int64(len(s.chunks)) {
+	if chunk < 0 {
 		return
 	}
 	for i, v := range s.acc {
@@ -981,8 +988,9 @@ func (s *spectrum) analyze(chunk int64) {
 		bands[b] = float32(math.Max(0, math.Min(1, (db+60)/52)))
 	}
 	s.mu.Lock()
-	s.chunks[chunk] = bands
-	s.have[chunk] = true
+	slot := &s.slots[chunk%spectrumSlots]
+	slot.chunk = chunk
+	slot.bands = bands
 	s.mu.Unlock()
 }
 
@@ -991,10 +999,14 @@ func (s *spectrum) at(frame int64) ([Bands]float32, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	c := frame / fftSize
-	if c < 0 || c >= int64(len(s.chunks)) || !s.have[c] {
+	if c < 0 {
 		return [Bands]float32{}, false
 	}
-	return s.chunks[c], true
+	slot := &s.slots[c%spectrumSlots]
+	if slot.chunk != c {
+		return [Bands]float32{}, false
+	}
+	return slot.bands, true
 }
 
 // fft transforms x in place; len(x) is a power of two.

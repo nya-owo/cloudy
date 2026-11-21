@@ -63,3 +63,36 @@ func TestDownloadMemoryBound(t *testing.T) {
 		t.Fatal("overflow changed the buffered data")
 	}
 }
+
+// Spectrum analysis must use fixed memory regardless of track length (e.g.
+// multi-hour podcasts or 96 kHz Hi-Res FLACs) while accurately serving chunks
+// near the current playback position.
+func TestSpectrumFixedMemoryRingBuffer(t *testing.T) {
+	// Simulate a 2-hour 96 kHz track (~691M frames, previously ~65 MB upfront).
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	s := newSpectrum(96000, 96000*7200)
+	runtime.ReadMemStats(&after)
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 256<<10 {
+		t.Fatalf("newSpectrum allocated %d bytes for a 2h 96kHz track, want <= 256 KB", allocated)
+	}
+
+	// Feed chunks beyond spectrumSlots to exercise wraparound and tag matching.
+	buf := make([]float32, fftSize*2)
+	for i := range buf {
+		buf[i] = 0.5
+	}
+	for c := int64(0); c < spectrumSlots+10; c++ {
+		s.feed(c*fftSize, buf)
+	}
+	// Chunk 0 was overwritten by chunk spectrumSlots, so querying chunk 0 must miss.
+	if _, ok := s.at(0); ok {
+		t.Fatal("evicted chunk 0 falsely matched newer ring slot")
+	}
+	// Recent chunk must hit.
+	if _, ok := s.at((spectrumSlots + 5) * fftSize); !ok {
+		t.Fatal("recent chunk missed spectrum ring buffer")
+	}
+	runtime.KeepAlive(s)
+}

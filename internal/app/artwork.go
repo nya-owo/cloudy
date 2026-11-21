@@ -51,10 +51,9 @@ type artCache struct {
 }
 
 // artLimit is how many bytes of covers the cache keeps. A cover keeps its
-// data, some 50–100 KB for Now Playing's and a few for a row's, so this
-// is thousands: going back to a page shows its covers as they were,
-// however long ago it showed them, rather than loading them again.
-const artLimit = 64 << 20
+// compressed data (a few KB for a row, ~50 KB for Now Playing), so 16 MiB
+// holds hundreds of covers while keeping resident memory tight.
+const artLimit = 16 << 20
 
 func newArtCache(post func(func())) *artCache {
 	return &artCache{art: map[string]*artwork{}, gone: map[string]weak.Pointer[artwork]{}, busy: map[string]bool{}, sem: make(chan struct{}, 8), post: post, now: time.Now, limit: artLimit}
@@ -64,11 +63,34 @@ func newArtCache(post func(func())) *artCache {
 // covers take more than the limit, down to three quarters of it, so that
 // it sorts them seldom. Those showing were asked for last, and stay.
 func (c *artCache) add(key string, a *artwork) {
+	if old, ok := c.art[key]; ok {
+		c.size -= old.size
+	}
 	c.art[key] = a
 	c.size += a.size
 	if c.size <= c.limit {
 		return
 	}
+	c.evictTo(c.limit * 3 / 4)
+}
+
+// trim drops the least recently used covers down to target bytes (e.g. when
+// the main window hides to the tray) and cleans up dead weak references.
+func (c *artCache) trim(target int) {
+	if c == nil {
+		return
+	}
+	for key, p := range c.gone {
+		if p.Value() == nil {
+			delete(c.gone, key)
+		}
+	}
+	if c.size > target {
+		c.evictTo(target)
+	}
+}
+
+func (c *artCache) evictTo(target int) {
 	for key, p := range c.gone {
 		if p.Value() == nil {
 			delete(c.gone, key)
@@ -80,7 +102,7 @@ func (c *artCache) add(key string, a *artwork) {
 	}
 	slices.SortFunc(keys, func(x, y string) int { return c.art[x].used.Compare(c.art[y].used) })
 	for _, key := range keys {
-		if c.size <= c.limit*3/4 {
+		if c.size <= target {
 			break
 		}
 		a := c.art[key]
@@ -116,6 +138,14 @@ func (c *artCache) get(url string, backdrop bool) *artwork {
 		}
 		delete(c.art, key)
 		c.size -= a.size
+	}
+	if !backdrop {
+		// Reuse a loaded "#backdrop" entry for the same URL instead of
+		// downloading and keeping a second copy of the exact same cover.
+		if a, ok := c.art[url+"#backdrop"]; ok && !a.failed {
+			a.used = now
+			return a
+		}
 	}
 	if a := c.gone[key].Value(); a != nil {
 		delete(c.gone, key)
@@ -162,9 +192,10 @@ func (c *artCache) get(url string, backdrop bool) *artwork {
 	return nil
 }
 
-// artRelease is how long a cover keeps its pixels once loaded: past the
-// frame that first shows it, and the smaller copies it shows from there.
-const artRelease = 2 * time.Second
+// artRelease is how long a cover keeps its decoded CPU pixels once loaded:
+// long enough for the first frames to upload it to the GPU without pinning
+// megabytes of uncompressed RGBA buffers while scrolling.
+const artRelease = 300 * time.Millisecond
 
 // Failed covers retry after a short backoff, rather than remaining blank
 // until restart or making a new request on every frame while offline.
