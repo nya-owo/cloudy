@@ -50,6 +50,7 @@ func (a *app) boot() {
 // signedIn shows what is personal to prof, or to nobody.
 func (a *app) signedIn(prof *netease.Profile) {
 	a.accountGen++
+	a.resetPrivateMessages()
 	for _, e := range a.likeEdits {
 		if e.timer != nil {
 			e.timer.Stop()
@@ -92,6 +93,7 @@ func (a *app) signedIn(prof *netease.Profile) {
 }
 
 func (a *app) openLogin() {
+	a.closePrivateMessages()
 	a.login = loginState{open: true, gen: a.login.gen + 1}
 	gen := a.login.gen
 	go func() {
@@ -436,6 +438,9 @@ func (a *app) accountMenu(c *ui.Context, row ui.Element) {
 		if a.menuItem(c, iconUser, "我的主页", "").AutoFocus().Clicked() {
 			a.accountOpen = false
 			a.open(route{page: pageUser, id: a.profile.UserID})
+		}
+		if a.menuItem(c, iconComment, "私信", "").Clicked() {
+			a.openPrivateMessages(nil)
 		}
 		if a.menuItem(c, iconSettings, "设置…", shortcut).Clicked() {
 			a.accountOpen = false

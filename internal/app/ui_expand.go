@@ -270,28 +270,44 @@ func (a *app) paneMotion(panel ui.Element) {
 // by its color, dim at most, not its opacity: that would take the panel with
 // it, whose glass would see nothing through it until the last frame.
 func (a *app) dialog(c *ui.Context, key string, dim float32, open *bool, fn func(panel ui.Element)) {
-	stage := ui.Box(c.Key(key+"-stage")).Absolute().Size(0, 0).PassThrough()
-	k := b2f(*open)
-	if a.motion != motionOff {
-		k = clamp01(stage.AnimateTo("in", k, motionPane))
-	}
+	a.dialogProgress(c, key, dim, open, func(panel ui.Element, _ float32, _ bool) { fn(panel) })
+}
+
+// Progress belongs to the same channel that paints the dialog. The result
+// reports whether the panel was built, including during its exit.
+func (a *app) dialogProgress(c *ui.Context, key string, dim float32, open *bool, fn func(panel ui.Element, progress float32, dismissed bool)) bool {
+	k := a.paneProgress(c, key, *open)
 	if k == 0 && !*open {
-		return
+		return false
 	}
 	shown := true
 	ui.DialogBase(c.Key(key), &shown, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, dim*k))
-		fn(panel)
-		if k < 1 {
-			panel.Opacity(k)
-			if a.motion == motionFull {
-				s := lerp(0.92, 1, k)
-				panel.Scale(s, s)
-			}
-		}
+		fn(panel, k, !shown)
+		a.stylePaneProgress(panel, k)
 	})
 	if !shown {
 		*open = false
+	}
+	return true
+}
+
+func (a *app) paneProgress(c *ui.Context, key string, open bool) float32 {
+	stage := ui.Box(c.Key(key+"-stage")).Absolute().Size(0, 0).PassThrough()
+	k := b2f(open)
+	if a.motion != motionOff {
+		k = clamp01(stage.AnimateTo("in", k, motionPane))
+	}
+	return k
+}
+
+func (a *app) stylePaneProgress(panel ui.Element, k float32) {
+	if k < 1 {
+		panel.Opacity(k)
+		if a.motion == motionFull {
+			s := lerp(0.92, 1, k)
+			panel.Scale(s, s)
+		}
 	}
 }
 

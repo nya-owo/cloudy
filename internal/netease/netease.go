@@ -766,9 +766,25 @@ func LocalSize(raw string) (string, int) {
 // Fetch returns what is at raw, a cover the image CDN serves or a local
 // file, whole, whatever the size Sized asked for.
 func Fetch(raw string) ([]byte, error) {
+	return FetchLimited(raw, 0)
+}
+
+var errFetchTooLarge = errors.New("image exceeds byte limit")
+
+// FetchLimited uses the same cover source as Fetch with an optional byte
+// limit. A non-positive limit leaves the read unbounded.
+func FetchLimited(raw string, limit int64) ([]byte, error) {
 	raw, _ = LocalSize(raw)
 	if path, ok := localPath(raw); ok {
-		return os.ReadFile(path)
+		if limit <= 0 {
+			return os.ReadFile(path)
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		return readImageBytes(file, limit)
 	}
 	req, err := http.NewRequest("GET", raw, nil)
 	if err != nil {
@@ -783,7 +799,29 @@ func Fetch(raw string) ([]byte, error) {
 	if res.StatusCode != http.StatusOK {
 		return nil, errors.New(res.Status)
 	}
-	return io.ReadAll(res.Body)
+	if limit > 0 && res.ContentLength > limit {
+		return nil, errFetchTooLarge
+	}
+	return readImageBytes(res.Body, limit)
+}
+
+func readImageBytes(r io.Reader, limit int64) ([]byte, error) {
+	if limit <= 0 {
+		return io.ReadAll(r)
+	}
+	data, err := io.ReadAll(io.LimitReader(r, limit))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) == limit {
+		var extra [1]byte
+		if _, err := io.ReadFull(r, extra[:]); err == nil {
+			return nil, errFetchTooLarge
+		} else if err != io.EOF {
+			return nil, err
+		}
+	}
+	return data, nil
 }
 
 // localPath returns the file raw names, if it names one rather than a

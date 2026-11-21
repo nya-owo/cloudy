@@ -197,22 +197,33 @@ func (a *app) coverFill(c *ui.Context, url string, px int, radius float32) {
 // coverPlayButton plays a playlist or a podcast from its card, without
 // opening it.
 func (a *app) coverPlayButton(c *ui.Context, shown bool, play func()) {
-	b := ui.ButtonBase(c.Key("play")).Absolute().Bottom(10).Right(10).Size(38, 38).Radius(999).Center().
-		TextColor(ui.RGB(255, 255, 255)).Label("播放").FocusRing(false).
-		Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.3))
+	b := a.coverPlay(c.Key("play"), shown, 38, "播放", false).Absolute().Bottom(10).Right(10)
+	if b.Clicked() {
+		play()
+	}
+}
+
+// coverPlayControl reveals the private message play button on keyboard focus.
+func (a *app) coverPlayControl(c *ui.Context, shown bool, size float32, label string) ui.Element {
+	return a.coverPlay(c, shown, size, label, true)
+}
+
+func (a *app) coverPlay(c *ui.Context, shown bool, size float32, label string, revealOnFocus bool) ui.Element {
+	scale := size / 38
+	b := ui.ButtonBase(c).Size(size, size).Radius(999).Center().
+		TextColor(ui.RGB(255, 255, 255)).Label(label).FocusRing(false).
+		Shadow(0, 4*scale, 12*scale, 0, ui.RGBA(0, 0, 0, 0.3))
 	b.Background(a.pal.accent)
-	pose := ui.Pose{Fade: 1, Scale: 0.8, Y: 6}
-	if shown || b.Hovered() {
+	pose := ui.Pose{Fade: 1, Scale: 0.8, Y: 6 * scale}
+	if shown || b.Hovered() || (revealOnFocus && b.FocusVisible()) {
 		pose = ui.Pose{Scale: 1}
 		if b.Hovered() {
 			pose.Scale = 1.08
 		}
 	}
 	b.AnimatePose(pose, ui.Snappy)
-	b.Children(func() { ui.Icon(c, iconPlay).Size(15, 15).Margin(0, 0, 0, 2) })
-	if b.Clicked() {
-		play()
-	}
+	b.Children(func() { ui.Icon(c, iconPlay).Size(15*scale, 15*scale).Margin(0, 0, 0, 2*scale) })
+	return b
 }
 
 // chartCard shows a chart with its top three songs beside its cover.

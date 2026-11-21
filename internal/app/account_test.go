@@ -35,6 +35,7 @@ func TestAccountMenu(t *testing.T) {
 	}
 	tt.Key(0, ui.KeyDown)
 	tt.Key(0, ui.KeyDown)
+	tt.Key(0, ui.KeyDown)
 	tt.Frame()
 	if !tt.Focused("退出登录…") {
 		t.Fatal("Down did not move to signing out")

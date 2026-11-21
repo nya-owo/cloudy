@@ -83,7 +83,8 @@ type app struct {
 	myAlbumsErr  string
 	myAlbumsBusy bool
 	login        loginState
-	accountOpen  bool           // the dropdown of the account row shows
+	accountOpen  bool // the dropdown of the account row shows
+	dm           privateMessagesState
 	naming       nameDialog     // the name of a playlist asked for
 	deleting     deleteDialog   // whether to delete a playlist, asked
 	signingOut   bool           // whether to sign out, asked
@@ -447,9 +448,22 @@ func Run() error {
 		// does.
 		a.syncDock()
 		a.win.OnShow(a.syncDock)
-		a.win.OnHide(a.syncDock)
+		a.win.OnHide(func() {
+			a.syncDock()
+			a.privateWindowPaused()
+		})
 		// Shown or switched to the morning after, it shows the new day's.
-		a.win.OnFocus(a.freshenPersonal)
+		a.win.OnFocus(func() {
+			a.freshenPersonal()
+			a.privateWindowFocused(time.Now())
+		})
+		a.win.OnBlur(func() {
+			a.privateWindowBlur(time.Now())
+		})
+		a.win.OnMinimize(a.privateWindowPaused)
+		a.win.OnRestore(func() {
+			a.privateWindowRestored(time.Now())
+		})
 		a.listenForDrops()
 		a.loadLibraryLater()
 		a.applyTray()
@@ -480,6 +494,7 @@ func Run() error {
 				return
 			}
 			e.PreventDefault()
+			a.closePrivateMessages()
 			if !a.settings.CloseQuits && (runtime.GOOS == "darwin" || a.tray != nil) {
 				a.hideMain()
 			} else {
@@ -497,6 +512,7 @@ func Run() error {
 		}
 	}
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.closePrivateMessages()
 		a.quitting = true
 		keep()
 	})
@@ -505,6 +521,7 @@ func Run() error {
 	// at every start (a viewer, 1.3.2).
 	mygo.App.OnQuit(func() {
 		if !a.quitting {
+			a.closePrivateMessages()
 			a.quitting = true
 			keep()
 		}

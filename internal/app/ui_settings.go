@@ -63,6 +63,7 @@ var dangerColor = ui.Hex("#e5484d")
 // openSettings shows the settings over the main window, where its glass has
 // the app to show through: a window of its own would have nothing under it.
 func (a *app) openSettings() {
+	a.closePrivateMessages()
 	a.measureCache()
 	a.dl.pathDraft = a.downloadFolder()
 	a.settingsView.query = ""

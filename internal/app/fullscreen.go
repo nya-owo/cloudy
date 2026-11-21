@@ -29,8 +29,11 @@ func (a *app) setNpFull(v bool) {
 // hideMain hides the main window, out of full screen first, so that it
 // does not come back covering the screen.
 func (a *app) hideMain() {
+	a.closePrivateMessages()
 	a.setNpFull(false)
-	a.win.Hide()
+	if a.win != nil {
+		a.win.Hide()
+	}
 }
 
 // fullHintFor is how long the bubble under the button says F11 is there,

@@ -126,6 +126,7 @@ func (a *app) view(c *ui.Context) {
 	a.deletePlaylistDialog(c)
 	a.downloadDeleteDialog(c)
 	a.settingsPanel(c)
+	a.privateMessagesPanel(c)
 	a.globalGlassDialog(c)
 	a.signOutDialog(c)
 	a.introDialog(c)
@@ -143,7 +144,7 @@ func (a *app) view(c *ui.Context) {
 	// A retained Handle may stay focused after its input is omitted. Check
 	// this build, after the page and foreground panels have bound their inputs.
 	editing := false
-	for _, field := range []ui.Handle{a.searchBox, a.filterBox, a.dl.box, a.mineView.box, a.settingsView.searchBox} {
+	for _, field := range []ui.Handle{a.searchBox, a.filterBox, a.dl.box, a.mineView.box, a.settingsView.searchBox, a.dm.searchBox, a.dm.composer} {
 		if c.Focused(field) && c.Resolve(field).Valid() {
 			editing = true
 		}

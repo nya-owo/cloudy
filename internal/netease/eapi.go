@@ -101,31 +101,11 @@ func eapiSend(ctx context.Context, as eapiAs, path string, data map[string]any, 
 	if as.client != nil {
 		client = as.client
 	}
-	header := map[string]string{
-		"osver":       client["osver"],
-		"deviceId":    device(),
-		"os":          client["os"],
-		"appver":      client["appver"],
-		"versioncode": "140",
-		"mobilename":  "",
-		"buildver":    fmt.Sprint(time.Now().Unix()),
-		"resolution":  "1920x1080",
-		"channel":     client["channel"],
-		"requestId":   fmt.Sprintf("%d_%04d", time.Now().UnixMilli(), time.Now().Nanosecond()%1000),
-		"__csrf":      "",
-	}
 	cookies := as.cookies
 	if cookies == nil {
 		cookies = httpClient.Jar.Cookies(siteURL)
 	}
-	for _, c := range cookies {
-		switch c.Name {
-		case "MUSIC_U", "NMTID":
-			header[c.Name] = c.Value
-		case "__csrf":
-			header["__csrf"] = c.Value
-		}
-	}
+	header := eapiHeader(client, device(), cookies, time.Now())
 	data["header"] = header
 	data["e_r"] = false
 	params, err := eapiEncrypt(path, data)
@@ -144,11 +124,7 @@ func eapiSend(ctx context.Context, as eapiAs, path string, data map[string]any, 
 	if err != nil {
 		return err
 	}
-	var cookie []string
-	for k, v := range header {
-		cookie = append(cookie, url.QueryEscape(k)+"="+url.QueryEscape(v))
-	}
-	req.Header.Set("Cookie", strings.Join(cookie, "; "))
+	req.Header.Set("Cookie", eapiCookie(header))
 	req.Header.Set("User-Agent", ua)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	// Sent by hand: the jar would add the site's cookies to these.
@@ -171,6 +147,41 @@ func eapiSend(ctx context.Context, as eapiAs, path string, data map[string]any, 
 		return err
 	}
 	return json.Unmarshal(body, out)
+}
+
+// eapiHeader is shared with private messaging, whose cookies belong to a
+// captured account. It never reads a global jar or the device file itself.
+func eapiHeader(client map[string]string, deviceID string, cookies []*http.Cookie, now time.Time) map[string]string {
+	header := map[string]string{
+		"osver":       client["osver"],
+		"deviceId":    deviceID,
+		"os":          client["os"],
+		"appver":      client["appver"],
+		"versioncode": "140",
+		"mobilename":  "",
+		"buildver":    fmt.Sprint(now.Unix()),
+		"resolution":  "1920x1080",
+		"channel":     client["channel"],
+		"requestId":   fmt.Sprintf("%d_%04d", now.UnixMilli(), now.Nanosecond()%1000),
+		"__csrf":      "",
+	}
+	for _, c := range cookies {
+		switch c.Name {
+		case "MUSIC_U", "NMTID":
+			header[c.Name] = c.Value
+		case "__csrf":
+			header["__csrf"] = c.Value
+		}
+	}
+	return header
+}
+
+func eapiCookie(header map[string]string) string {
+	var cookie []string
+	for k, v := range header {
+		cookie = append(cookie, url.QueryEscape(k)+"="+url.QueryEscape(v))
+	}
+	return strings.Join(cookie, "; ")
 }
 
 // eapiOK calls path through the eapi with data, and fails unless NetEase

@@ -143,6 +143,11 @@ func (a *app) userPage(c *ui.Context) {
 				ui.Text(c, "用户").FontSize(12).FontWeight(600).TextColor(p.accent)
 				ui.Text(c, u.Nickname).FontSize(30).FontWeight(800).LetterSpacing(-0.6).MaxLines(2).LineHeight(1.2)
 				ui.Text(c, fmt.Sprintf("%s 关注 · %s 粉丝", count(u.Follows), count(u.Followeds))).FontSize(13).TextColor(p.muted)
+				if a.profile != nil && !own {
+					if pillButton(c.Key("private-message"), iconComment, "发私信", p.hover, p.text).Clicked() {
+						a.openPrivateMessages(&netease.MessageUser{UserID: id, Nickname: u.Nickname, AvatarURL: u.AvatarURL})
+					}
+				}
 				if u.Signature != "" {
 					ui.Text(c, u.Signature).FontSize(12.5).TextColor(p.muted).MaxLines(2).LineHeight(1.45).Margin(2, 0, 0, 0)
 				}
