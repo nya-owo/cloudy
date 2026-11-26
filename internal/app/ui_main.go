@@ -572,6 +572,27 @@ func edgeShown(el ui.Element, under bool) float32 {
 	return el.AnimateTo("shown", target, ui.Animation{Duration: 180 * time.Millisecond})
 }
 
+// topShadeIdle is how much of the edge over the top shows at rest, over
+// whatever the page has behind the strip: the window's own buttons sit there,
+// and their glyphs vanish into a cover's colors, or the desktop the window's
+// material shows.
+const topShadeIdle = 0.5
+
+// topShade returns how much of the scroll edge over el shows: all of it once
+// content is under the bar, and over a page the veil of it at rest, where the
+// page has a cover behind the strip and the window's buttons would read
+// against its colors otherwise: a page of the plain color keeps none.
+func (a *app) topShade(el ui.Element) float32 {
+	target := float32(0)
+	switch {
+	case a.underTop:
+		target = 1
+	case a.pageArt() != "":
+		target = topShadeIdle
+	}
+	return el.AnimateTo("shade", target, ui.Animation{Duration: 180 * time.Millisecond})
+}
+
 // pageTop is the strip over the top of a page, what scrolls under it frosted
 // as macOS 26's hard scroll edge does, or, beside a bar of glass that floats,
 // fading away from it, as the soft one does, with no line across the window:
@@ -579,19 +600,19 @@ func edgeShown(el ui.Element, under bool) float32 {
 // back to.
 func (a *app) pageTop(c *ui.Context, foreground float32) {
 	top, _ := a.insets(c)
-	if a.settings.mainGlass() {
+	if a.settings.mainGlass() || a.settings.playerGlass() {
 		// The fade lays the page's plain color over what scrolls under the
-		// top, which over the cover's colors shows as a pale band: none.
-		ui.Box(c.Key("top-drag")).Absolute().Top(0).Left(0).Right(0).Height(top).DragWindow()
-	} else if a.settings.playerGlass() {
+		// top, which over the cover's colors shows as a pale band: none over
+		// the page itself, but a veil at rest, as the window's buttons read
+		// over the material behind them otherwise.
 		edge := ui.Box(c.Key("top-edge")).Absolute().Top(0).Left(0).Right(0).Height(top + 24).PassThrough()
 		edge.Material(glass.ScrollEdge{Background: a.pal.bg})
-		edge.Opacity(edgeShown(edge, a.underTop))
+		edge.Opacity(a.topShade(edge))
 		ui.Box(c.Key("top-drag")).Absolute().Top(0).Left(0).Right(0).Height(top).DragWindow()
 	} else {
 		edge := ui.Box(c.Key("top-edge")).Absolute().Top(0).Left(0).Right(0).Height(top).DragWindow().
 			Material(glass.ScrollEdge{Hard: true, Background: a.pal.bg})
-		edge.Opacity(edgeShown(edge, a.underTop))
+		edge.Opacity(a.topShade(edge))
 	}
 	// The settings, left of the window's own buttons, where apps keep them;
 	// the mini window beside them, at any width (PR #11, kept in 1.3.2).
