@@ -690,8 +690,12 @@ func streamFromSongURLData(code int, d songURLData, level string) (*Stream, erro
 			s.Type = "flac"
 		}
 	}
-	// WAV is the cloud drive's, of songs the listener uploaded (#54).
-	if s.Type != "mp3" && s.Type != "flac" && s.Type != "wav" {
+	// Beyond MP3 and FLAC, the cloud drive serves songs the listener uploaded
+	// in their original format (#54, #88); accept what the player can decode
+	// and refuse the rest so lossless can still fall back.
+	switch s.Type {
+	case "mp3", "flac", "wav", "m4a", "m4b", "aac", "wma", "aif", "aiff", "aifc", "dsf", "dff":
+	default:
 		return nil, fmt.Errorf("%w %s", errUnsupportedFormat, s.Type)
 	}
 	if d.Peak != nil {

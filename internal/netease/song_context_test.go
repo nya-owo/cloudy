@@ -134,7 +134,7 @@ func TestSongURLKeepsIPLiteralHTTP(t *testing.T) {
 	}
 }
 
-// When a lossless request returns an unsupported format such as m4a, SongURL
+// When a lossless request returns an unsupported format such as ape, SongURL
 // falls back to exhigh MP3 so playback still succeeds.
 func TestSongURLFallbackFromUnsupportedLosslessFormat(t *testing.T) {
 	old := http.DefaultTransport
@@ -142,7 +142,7 @@ func TestSongURLFallbackFromUnsupportedLosslessFormat(t *testing.T) {
 	calls := 0
 	http.DefaultTransport = songContextTransport(func(r *http.Request) (*http.Response, error) {
 		calls++
-		body := `{"code":200,"data":[{"url":"http://audio.test/song.m4a","type":"m4a","size":1000,"level":"lossless"}]}`
+		body := `{"code":200,"data":[{"url":"http://audio.test/song.ape","type":"ape","size":1000,"level":"lossless"}]}`
 		if calls > 1 {
 			body = `{"code":200,"data":[{"url":"http://audio.test/song.mp3","type":"mp3","size":500,"level":"exhigh"}]}`
 		}
@@ -169,5 +169,34 @@ func TestCloudWAVStreams(t *testing.T) {
 	}
 	if _, err := streamFromSongURLData(200, songURLData{URL: "http://audio.test/song.ape", Type: "ape"}, "lossless"); !errors.Is(err, errUnsupportedFormat) {
 		t.Fatalf("ape: %v", err)
+	}
+}
+
+// Cloud-drive uploads in formats the player can decode stream as they are
+// instead of being rejected as unsupported (#88).
+func TestCloudFormatsStream(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want string
+	}{
+		{"M4A", "m4a"},
+		{"m4b", "m4b"},
+		{"AAC", "aac"},
+		{"wma", "wma"},
+		{"aiff", "aiff"},
+		{"dsf", "dsf"},
+	} {
+		st, err := streamFromSongURLData(200, songURLData{URL: "http://audio.test/song." + tc.want, Type: tc.raw, Size: 1000, Level: "lossless"}, "lossless")
+		if err != nil {
+			t.Fatalf("%s: %v", tc.raw, err)
+		}
+		if st.Type != tc.want {
+			t.Fatalf("%s: type %q, want %q", tc.raw, st.Type, tc.want)
+		}
+	}
+	for _, bad := range []string{"ape", "ogg"} {
+		if _, err := streamFromSongURLData(200, songURLData{URL: "http://audio.test/song." + bad, Type: bad}, "lossless"); !errors.Is(err, errUnsupportedFormat) {
+			t.Fatalf("%s: %v", bad, err)
+		}
 	}
 }
