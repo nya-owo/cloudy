@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -143,6 +144,79 @@ func TestPlaylistSearchAndSort(t *testing.T) {
 	a.route = route{page: pagePlaylist, id: 2}
 	if a.listShown(pl.Tracks); a.plView.sort != 0 {
 		t.Error("the next playlist opened sorted as the last one")
+	}
+}
+
+// Leaving a searched playlist for an artist page and coming back keeps its
+// search and filtered songs; previously switching routes reset plView (#100).
+func TestPlaylistStateRestoredOnReturn(t *testing.T) {
+	a := newTestApp()
+	song := func(id int64, name, singer string) netease.Track {
+		return netease.Track{ID: id, Name: name, Artists: []netease.Artist{{Name: singer}}}
+	}
+	plTracks := []netease.Track{
+		song(1, "晴天", "周杰伦"),
+		song(2, "Anchor", "Novo Amor"),
+		song(3, "稻香", "周杰伦"),
+	}
+	artistTracks := []netease.Track{song(10, "七里香", "周杰伦")}
+
+	a.route = route{page: pagePlaylist, id: 1}
+	a.listShown(plTracks)
+	a.plView.query = "周杰伦"
+	before := a.listShown(plTracks)
+	if len(before) != 2 {
+		t.Fatalf("expected 2 matches before leaving, got %d", len(before))
+	}
+
+	a.route = route{page: pageArtist, id: 42}
+	if got := a.listShown(artistTracks); len(got) != 1 || a.plView.query != "" {
+		t.Fatalf("artist page got %d tracks with query %q", len(got), a.plView.query)
+	}
+
+	a.route = route{page: pagePlaylist, id: 1}
+	after := a.listShown(plTracks)
+	if a.plView.query != "周杰伦" {
+		t.Fatalf("returning to playlist lost query: got %q", a.plView.query)
+	}
+	if len(after) != len(before) || after[0].ID != before[0].ID || after[1].ID != before[1].ID {
+		t.Errorf("returning to playlist changed filtered songs: before %v, after %v", before, after)
+	}
+
+	a.route = route{page: pagePlaylist, id: 2}
+	if got := a.listShown(plTracks); a.plView.query != "" || len(got) != len(plTracks) {
+		t.Errorf("first visit to another playlist got query %q and %d tracks", a.plView.query, len(got))
+	}
+}
+
+// Stashed list views stop growing at maxNavHistory, dropping the oldest route
+// first (#100).
+func TestPlaylistStateEvictsOldest(t *testing.T) {
+	a := newTestApp()
+	tracks := []netease.Track{{ID: 1, Name: "晴天", Artists: []netease.Artist{{Name: "周杰伦"}}}}
+
+	for id := int64(1); id <= maxNavHistory+2; id++ {
+		a.route = route{page: pagePlaylist, id: id}
+		a.listShown(tracks)
+		a.plView.query = fmt.Sprintf("q%d", id)
+	}
+	if len(a.plViews) != maxNavHistory || len(a.plViewOrder) != maxNavHistory {
+		t.Fatalf("stash has %d views and %d order entries, want %d", len(a.plViews), len(a.plViewOrder), maxNavHistory)
+	}
+
+	// Route 2 is the oldest still stashed; returning to it should restore it
+	// without evicting it first.
+	a.route = route{page: pagePlaylist, id: 2}
+	a.listShown(tracks)
+	if a.plView.query != "q2" {
+		t.Errorf("oldest kept route lost query: got %q, want %q", a.plView.query, "q2")
+	}
+
+	// Route 1 was evicted, so opening it starts fresh.
+	a.route = route{page: pagePlaylist, id: 1}
+	a.listShown(tracks)
+	if a.plView.query != "" {
+		t.Errorf("evicted route kept query %q", a.plView.query)
 	}
 }
 

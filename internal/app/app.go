@@ -274,27 +274,33 @@ type app struct {
 	cameFrom              cardOrigin       // the card this page was opened from
 	restoreY              float32          // how far to scroll the page coming back
 	plView                plView           // how the playlist open is searched and sorted
-	headGone              float32          // how far the page's header has scrolled away
-	rowsRoute             route            // the page whose list last came in
-	rowsAt                time.Time        // when it started to
-	rowsPending           bool             // waiting for trackList's first layout
-	rowsWaited            time.Time        // since when
-	rowsStart, rowsCount  int              // the first song and count in the entrance batch
-	sideColor             ui.Color         // what the sidebar shows, as it eases
-	flight                coverFlight      // a cover on its way to the page it opens
-	heldRoute             route            // the page opened from a card
-	heldURL               string           // and the cover the card gave it
-	playSpot              ui.Rect          // where the play button last built is
-	backdropCache         backdropCache    // the backdrop of Now Playing, as last painted
-	pageGlass             pageGlass        // the cover the cover backgrounds show, as it changes
-	windowMaterial        mygo.Vibrancy
-	npArt                 *artwork     // the cover whose colors Now Playing shows
-	npCoverState          coverState   // the cover of Now Playing, as it is tilted and flicked
-	wallState             wallState    // the wall of the queue's covers, as it is dragged
-	quiet                 quietState   // the quiet parts of the song playing, for its hot comments
-	captions              captionState // the episode playing's captions, and the model that writes them
-	sig                   playerSig
-	quitting              bool
+	// plViews keeps each list page's search and sort while the listener visits
+	// another page (such as an artist or album) and comes back (#100).
+	// plViewOrder tracks when each was stashed, oldest first, capped at
+	// maxNavHistory.
+	plViews              map[route]plView
+	plViewOrder          []route
+	headGone             float32       // how far the page's header has scrolled away
+	rowsRoute            route         // the page whose list last came in
+	rowsAt               time.Time     // when it started to
+	rowsPending          bool          // waiting for trackList's first layout
+	rowsWaited           time.Time     // since when
+	rowsStart, rowsCount int           // the first song and count in the entrance batch
+	sideColor            ui.Color      // what the sidebar shows, as it eases
+	flight               coverFlight   // a cover on its way to the page it opens
+	heldRoute            route         // the page opened from a card
+	heldURL              string        // and the cover the card gave it
+	playSpot             ui.Rect       // where the play button last built is
+	backdropCache        backdropCache // the backdrop of Now Playing, as last painted
+	pageGlass            pageGlass     // the cover the cover backgrounds show, as it changes
+	windowMaterial       mygo.Vibrancy
+	npArt                *artwork     // the cover whose colors Now Playing shows
+	npCoverState         coverState   // the cover of Now Playing, as it is tilted and flicked
+	wallState            wallState    // the wall of the queue's covers, as it is dragged
+	quiet                quietState   // the quiet parts of the song playing, for its hot comments
+	captions             captionState // the episode playing's captions, and the model that writes them
+	sig                  playerSig
+	quitting             bool
 
 	settings     settings
 	settingsView settingsView    // the settings panel

@@ -172,7 +172,34 @@ func albumKey(t *netease.Track) string {
 func (a *app) listShown(tracks []netease.Track) []netease.Track {
 	v := &a.plView
 	if v.route != a.route {
-		*v = plView{route: a.route}
+		// Stash the list being left so returning from an artist or album page
+		// restores its search and sort instead of resetting them (#100).
+		prev := *v
+		if saved, ok := a.plViews[a.route]; ok {
+			*v = saved
+			delete(a.plViews, a.route)
+			if i := slices.Index(a.plViewOrder, a.route); i >= 0 {
+				a.plViewOrder = slices.Delete(a.plViewOrder, i, i+1)
+			}
+		} else {
+			*v = plView{route: a.route}
+		}
+		if prev.route != (route{}) {
+			if a.plViews == nil {
+				a.plViews = map[route]plView{}
+			}
+			a.plViews[prev.route] = prev
+			if i := slices.Index(a.plViewOrder, prev.route); i >= 0 {
+				a.plViewOrder = slices.Delete(a.plViewOrder, i, i+1)
+			}
+			a.plViewOrder = append(a.plViewOrder, prev.route)
+			if n := len(a.plViewOrder) - maxNavHistory; n > 0 {
+				for _, old := range a.plViewOrder[:n] {
+					delete(a.plViews, old)
+				}
+				a.plViewOrder = slices.Delete(a.plViewOrder, 0, n)
+			}
+		}
 	}
 	q := strings.ToLower(strings.TrimSpace(v.query))
 	if len(tracks) == 0 || q == "" && v.sort == 0 {
